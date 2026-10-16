@@ -1,0 +1,73 @@
+[
+    {
+        "id":  1,
+        "priority":  1,
+        "action":  {
+                       "type":  "redirect",
+                       "redirect":  {
+                                        "regexSubstitution":  "chrome-extension://dkoohdpnfiphcimpklkphfbjibbaenje/index.html?lite=1\u0026lang=fr#file=\\0"
+                                    }
+                   },
+        "condition":  {
+                          "regexFilter":  "^https?://[^?#]*\\.[pP][dD][fF]([?#].*)?$",
+                          "resourceTypes":  [
+                                                "main_frame"
+                                            ],
+                          "requestMethods":  [
+                                                 "get"
+                                             ]
+                      }
+    },
+    {
+        "id":  2,
+        "priority":  1,
+        "action":  {
+                       "type":  "redirect",
+                       "redirect":  {
+                                        "regexSubstitution":  "chrome-extension://dkoohdpnfiphcimpklkphfbjibbaenje/index.html?lite=1\u0026lang=fr#file=\\0"
+                                    }
+                   },
+        "condition":  {
+                          "regexFilter":  "^file://[^?#]*\\.[pP][dD][fF]([?#].*)?$",
+                          "resourceTypes":  [
+                                                "main_frame"
+                                            ]
+                      }
+    },
+    {
+        "id":  3,
+        "priority":  1,
+        "action":  {
+                       "type":  "redirect",
+                       "redirect":  {
+                                        "regexSubstitution":  "chrome-extension://dkoohdpnfiphcimpklkphfbjibbaenje/index.html?lite=1\u0026lang=fr#file=\\0"
+                                    }
+                   },
+        "condition":  {
+                          "regexFilter":  "^https?://.*$",
+                          "resourceTypes":  [
+                                                "main_frame"
+                                            ],
+                          "requestMethods":  [
+                                                 "get"
+                                             ],
+                          "responseHeaders":  [
+                                                  {
+                                                      "header":  "content-type",
+                                                      "values":  [
+                                                                     "application/pdf*",
+                                                                     "application/x-pdf*"
+                                                                 ]
+                                                  }
+                                              ],
+                          "excludedResponseHeaders":  [
+                                                          {
+                                                              "header":  "content-disposition",
+                                                              "values":  [
+                                                                             "attachment*"
+                                                                         ]
+                                                          }
+                                                      ]
+                      }
+    }
+]

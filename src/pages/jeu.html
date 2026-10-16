@@ -1,0 +1,374 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <title>Pouley contre le Renard</title>
+  <link rel="stylesheet" href="pouley://static/pages/pages.css" />
+  <style>
+    html, body { overflow: hidden; background: #154d30; }
+    canvas { display: block; width: 100vw; height: 100vh; image-rendering: pixelated; cursor: crosshair; }
+    .hud { position: fixed; top: 14px; left: 16px; right: 16px; display: flex; gap: 12px; align-items: center; pointer-events: none; font-family: 'JetBrains Mono', monospace; }
+    .pill { background: rgba(14, 14, 16, 0.78); color: var(--bright); padding: 6px 12px; border-radius: 10px; font-size: 14px; border: 1px solid rgba(255, 255, 255, 0.08); }
+    .pill b { color: var(--yellow); }
+    .dash { width: 90px; height: 8px; border-radius: 6px; background: rgba(255, 255, 255, 0.15); overflow: hidden; display: inline-block; vertical-align: middle; margin-left: 6px; }
+    .dash i { display: block; height: 100%; background: #4a8cf0; }
+    .grow { flex: 1; }
+    .offline { position: fixed; top: 60px; left: 50%; transform: translateX(-50%); display: none; align-items: center; gap: 12px; padding: 10px 14px; border-radius: 14px; background: rgba(14, 14, 16, 0.86); color: var(--bright); font-size: 14px; border: 1px solid rgba(255, 255, 255, 0.1); z-index: 3; max-width: 92vw; }
+    .offline.show { display: flex; }
+    .offline .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--red); flex: none; }
+    .offline.online .dot { background: #4ade80; }
+    .offline .btn { height: 32px; padding: 0 12px; font-size: 13px; }
+    .screen { position: fixed; inset: 0; display: grid; place-items: center; z-index: 2; background: rgba(8, 12, 10, 0.55); }
+    .screen.hidden { display: none; }
+    .card { text-align: center; padding: 28px 34px; border-radius: 22px; background: rgba(17, 17, 19, 0.9); border: 1px solid rgba(255, 255, 255, 0.1); max-width: 460px; box-shadow: 0 30px 80px -20px rgba(0, 0, 0, 0.8); }
+    .card h1 { margin: 6px 0 8px; color: var(--bright); font-size: 26px; }
+    .card p { margin: 0 0 14px; color: var(--text); }
+    .card .sprites { display: flex; justify-content: center; gap: 20px; align-items: flex-end; }
+    .card .sprites div { width: 80px; height: 80px; }
+    .card .flip { transform: scaleX(-1); }
+    .keys { font-size: 13px; color: var(--muted); line-height: 1.8; }
+    kbd { font: 12px 'JetBrains Mono', monospace; padding: 2px 6px; border-radius: 6px; background: #26262a; border: 1px solid rgba(255, 255, 255, 0.12); color: var(--bright); }
+    .score { font: 600 42px 'JetBrains Mono', monospace; color: var(--yellow); margin: 4px 0; }
+  </style>
+</head>
+<body>
+  <canvas id="c"></canvas>
+  <div class="hud">
+    <span class="pill">Score <b id="score">0</b></span>
+    <span class="pill">Record <b id="best">0</b></span>
+    <span class="pill">Sprint <span class="dash"><i id="dash"></i></span></span>
+    <span class="grow"></span>
+    <span class="pill" id="foxes">🦊 ×1</span>
+  </div>
+  <div class="offline" id="offline">
+    <span class="dot"></span>
+    <span id="offline-text">Pas de connexion internet — le renard a rongé les câbles. Joue en attendant !</span>
+    <button class="btn primary" id="retry" style="display:none">Retourner sur la page</button>
+  </div>
+  <div class="screen" id="start">
+    <div class="card">
+      <div class="sprites"><div id="s-poule" class="flip"></div><div id="s-renard"></div></div>
+      <h1>Pouley contre le Renard</h1>
+      <p>Picore le maïs 🌽, ramasse les œufs d’or 🥚 (ils font fuir les renards) et surtout : ne te fais pas attraper !</p>
+      <div class="keys">
+        <kbd>↑</kbd><kbd>↓</kbd><kbd>←</kbd><kbd>→</kbd> ou <kbd>Z</kbd><kbd>Q</kbd><kbd>S</kbd><kbd>D</kbd> / <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> pour courir — ou maintiens la souris<br />
+        <kbd>Espace</kbd> sprint · <kbd>P</kbd> pause
+      </div>
+      <p style="margin-top:18px"><button class="btn primary" id="play">Jouer (Entrée)</button></p>
+    </div>
+  </div>
+  <div class="screen hidden" id="over">
+    <div class="card">
+      <div class="sprites"><div id="o-renard"></div></div>
+      <h1 id="over-title">Le renard t’a attrapée !</h1>
+      <div class="score" id="final">0</div>
+      <p id="over-msg"></p>
+      <p><button class="btn primary" id="again">Rejouer (Entrée)</button></p>
+    </div>
+  </div>
+
+  <script src="pouley://static/shared/sprites.js"></script>
+  <script>
+  (() => {
+    const S = PouleySprites;
+    const cv = document.getElementById('c');
+    const ctx = cv.getContext('2d');
+    const PX = 3; // taille d'un pixel de sprite
+    let W = 0, H = 0;
+
+    // Sprites pré-rendus (normaux + retournés)
+    function bake(rows, scale, flip) {
+      const c = document.createElement('canvas');
+      c.width = rows[0].length * scale;
+      c.height = rows.length * scale;
+      S.drawToCanvas(c.getContext('2d'), rows, 0, 0, scale, flip);
+      return c;
+    }
+    const SPR = {
+      poule: [S.POULE_RUN.map((f) => bake(f, PX, false)), S.POULE_RUN.map((f) => bake(f, PX, true))],
+      renard: [S.RENARD.map((f) => bake(f, PX, false)), S.RENARD.map((f) => bake(f, PX, true))],
+      mais: bake(S.MAIS, PX, false),
+      oeuf: bake(S.OEUF, PX, false),
+    };
+    document.getElementById('s-poule').innerHTML = S.toSvg(S.POULE);
+    document.getElementById('s-renard').innerHTML = S.toSvg(S.RENARD[0]);
+    document.getElementById('o-renard').innerHTML = S.toSvg(S.RENARD[1]);
+
+    // Herbe de fond pré-rendue
+    let field = null;
+    function buildField() {
+      field = document.createElement('canvas');
+      field.width = W; field.height = H;
+      const g = field.getContext('2d');
+      g.fillStyle = '#2f9a5e'; g.fillRect(0, 0, W, H);
+      for (let i = 0; i < (W * H) / 700; i++) {
+        const x = Math.random() * W, y = Math.random() * H;
+        g.fillStyle = Math.random() < 0.5 ? '#3bb273' : '#23864f';
+        g.fillRect(Math.round(x / 3) * 3, Math.round(y / 3) * 3, 3, 6);
+      }
+      for (let i = 0; i < (W * H) / 30000; i++) {
+        const x = Math.random() * W, y = Math.random() * H;
+        g.fillStyle = ['#ffe100', '#ffffff', '#ef3e36'][i % 3];
+        g.fillRect(Math.round(x / 3) * 3, Math.round(y / 3) * 3, 3, 3);
+      }
+    }
+
+    function resize() {
+      W = cv.width = innerWidth;
+      H = cv.height = innerHeight;
+      ctx.imageSmoothingEnabled = false;
+      buildField();
+      if (state) state.bushes = state.bushes.filter((b) => b.x < W && b.y < H);
+    }
+
+    const keys = new Set();
+    const mouse = { down: false, x: 0, y: 0 };
+    let state = null;
+    let best = Number(localStorage.getItem('pouley-best') || 0);
+    document.getElementById('best').textContent = best;
+    let running = false, paused = false, last = 0;
+
+    function makeBushes() {
+      const list = [];
+      const n = Math.max(4, Math.round((W * H) / 110000));
+      for (let i = 0; i < n * 4 && list.length < n; i++) {
+        const b = { x: 60 + Math.random() * (W - 120), y: 90 + Math.random() * (H - 150), r: 22 + Math.random() * 20 };
+        if (Math.hypot(b.x - W / 2, b.y - H / 2) < 130) continue;
+        if (list.some((o) => Math.hypot(o.x - b.x, o.y - b.y) < o.r + b.r + 60)) continue;
+        list.push(b);
+      }
+      return list;
+    }
+
+    function newGame() {
+      state = {
+        t: 0, score: 0,
+        hen: { x: W / 2, y: H / 2, vx: 0, vy: 0, face: 1, frame: 0, sprint: 0, cooldown: 0 },
+        foxes: [spawnFox()],
+        corn: [], eggs: [], bushes: makeBushes(), scare: 0, nextCorn: 0, nextEgg: 8, floats: [],
+      };
+      running = true; paused = false;
+      document.getElementById('start').classList.add('hidden');
+      document.getElementById('over').classList.add('hidden');
+    }
+
+    function spawnFox() {
+      const side = Math.floor(Math.random() * 4);
+      const x = side === 0 ? -40 : side === 1 ? W + 40 : Math.random() * W;
+      const y = side === 2 ? -40 : side === 3 ? H + 40 : Math.random() * H;
+      return { x, y, face: 1, frame: 0, speed: 118 };
+    }
+
+    function collideBushes(e, radius) {
+      for (const b of state.bushes) {
+        const dx = e.x - b.x, dy = e.y - b.y;
+        const d = Math.hypot(dx, dy);
+        const min = b.r + radius;
+        if (d < min && d > 0) { e.x = b.x + (dx / d) * min; e.y = b.y + (dy / d) * min; }
+      }
+    }
+
+    function update(dt) {
+      const s = state;
+      s.t += dt;
+      s.score += dt * (s.scare > 0 ? 2 : 1);
+      const hen = s.hen;
+
+      // Contrôles (flèches, ZQSD, WASD, souris)
+      let ix = 0, iy = 0;
+      if (keys.has('arrowleft') || keys.has('q') || keys.has('a')) ix -= 1;
+      if (keys.has('arrowright') || keys.has('d')) ix += 1;
+      if (keys.has('arrowup') || keys.has('z') || keys.has('w')) iy -= 1;
+      if (keys.has('arrowdown') || keys.has('s')) iy += 1;
+      if (mouse.down && !ix && !iy) {
+        const dx = mouse.x - hen.x, dy = mouse.y - hen.y;
+        const d = Math.hypot(dx, dy);
+        if (d > 8) { ix = dx / d; iy = dy / d; }
+      }
+      const len = Math.hypot(ix, iy) || 1;
+      hen.cooldown = Math.max(0, hen.cooldown - dt);
+      hen.sprint = Math.max(0, hen.sprint - dt);
+      const speed = 200 * (hen.sprint > 0 ? 1.9 : 1);
+      hen.vx = (ix / len) * speed;
+      hen.vy = (iy / len) * speed;
+      hen.x = Math.min(W - 20, Math.max(20, hen.x + hen.vx * dt));
+      hen.y = Math.min(H - 20, Math.max(56, hen.y + hen.vy * dt));
+      collideBushes(hen, 18);
+      if (ix) hen.face = ix > 0 ? 1 : 0;
+      if (ix || iy) hen.frame += dt * (hen.sprint > 0 ? 14 : 8);
+
+      // Renards : vitesse croissante, un de plus toutes les 25 s (max 4)
+      const wanted = Math.min(4, 1 + Math.floor(s.t / 25));
+      while (s.foxes.length < wanted) { s.foxes.push(spawnFox()); float(W / 2, 80, 'Un autre renard arrive !', '#ef3e36'); }
+      s.scare = Math.max(0, s.scare - dt);
+      for (const f of s.foxes) {
+        f.speed = Math.min(250, 118 + s.t * 2.2);
+        let dx = hen.x - f.x, dy = hen.y - f.y;
+        // anticipation légère de la trajectoire de la poule
+        dx += hen.vx * 0.25; dy += hen.vy * 0.25;
+        const d = Math.hypot(dx, dy) || 1;
+        const dir = s.scare > 0 ? -0.75 : 1;
+        f.x += (dx / d) * f.speed * dir * dt;
+        f.y += (dy / d) * f.speed * dir * dt;
+        // les renards s'écartent un peu les uns des autres
+        for (const o of s.foxes) {
+          if (o === f) continue;
+          const ox = f.x - o.x, oy = f.y - o.y, od = Math.hypot(ox, oy);
+          if (od < 50 && od > 0) { f.x += (ox / od) * 40 * dt; f.y += (oy / od) * 40 * dt; }
+        }
+        f.x = Math.min(W + 60, Math.max(-60, f.x));
+        f.y = Math.min(H + 60, Math.max(-60, f.y));
+        collideBushes(f, 20);
+        f.face = (dx * dir) > 0 ? 1 : 0;
+        f.frame += dt * 9;
+        if (s.scare <= 0 && Math.hypot(hen.x - f.x, hen.y - f.y) < 30) return gameOver();
+      }
+
+      // Maïs et œufs d'or
+      s.nextCorn -= dt;
+      if (s.nextCorn <= 0 && s.corn.length < 6) { s.corn.push(randomSpot()); s.nextCorn = 1.2 + Math.random() * 1.5; }
+      s.nextEgg -= dt;
+      if (s.nextEgg <= 0 && s.eggs.length < 1) { s.eggs.push({ ...randomSpot(), life: 7 }); s.nextEgg = 14 + Math.random() * 8; }
+      for (let i = s.corn.length - 1; i >= 0; i--) {
+        const c = s.corn[i];
+        if (Math.hypot(c.x - hen.x, c.y - hen.y) < 26) { s.corn.splice(i, 1); s.score += 10; float(c.x, c.y, '+10', '#ffe100'); }
+      }
+      for (let i = s.eggs.length - 1; i >= 0; i--) {
+        const e = s.eggs[i];
+        e.life -= dt;
+        if (Math.hypot(e.x - hen.x, e.y - hen.y) < 28) { s.eggs.splice(i, 1); s.score += 50; s.scare = 4; float(e.x, e.y, '+50 · les renards fuient !', '#ffffff'); }
+        else if (e.life <= 0) s.eggs.splice(i, 1);
+      }
+      for (const f of s.floats) { f.y -= 30 * dt; f.life -= dt; }
+      s.floats = s.floats.filter((f) => f.life > 0);
+
+      document.getElementById('score').textContent = Math.floor(s.score);
+      document.getElementById('dash').style.width = (hen.cooldown > 0 ? 100 - (hen.cooldown / 3) * 100 : 100) + '%';
+      document.getElementById('foxes').textContent = (s.scare > 0 ? '😱 ' : '🦊 ×') + (s.scare > 0 ? 'ils fuient !' : s.foxes.length);
+    }
+
+    function randomSpot() {
+      for (let i = 0; i < 30; i++) {
+        const p = { x: 40 + Math.random() * (W - 80), y: 80 + Math.random() * (H - 120) };
+        if (!state.bushes.some((b) => Math.hypot(b.x - p.x, b.y - p.y) < b.r + 20)) return p;
+      }
+      return { x: W / 2, y: H / 2 };
+    }
+    function float(x, y, text, color) { state.floats.push({ x, y, text, color, life: 1.2 }); }
+
+    function draw() {
+      ctx.drawImage(field, 0, 0);
+      if (!state) return;
+      const s = state;
+      for (const b of s.bushes) {
+        ctx.fillStyle = 'rgba(0,0,0,0.18)';
+        ctx.beginPath(); ctx.ellipse(b.x + 4, b.y + b.r * 0.6, b.r, b.r * 0.45, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#1d6b3d'; ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#26874d'; ctx.beginPath(); ctx.arc(b.x - b.r * 0.3, b.y - b.r * 0.3, b.r * 0.55, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#ef3e36'; ctx.fillRect(Math.round(b.x + b.r * 0.2), Math.round(b.y - b.r * 0.1), 4, 4);
+      }
+      const bob = (Math.sin(s.t * 4) + 1) * 2;
+      for (const c of s.corn) ctx.drawImage(SPR.mais, Math.round(c.x - 9), Math.round(c.y - 9 - bob));
+      for (const e of s.eggs) {
+        if (e.life < 2 && Math.floor(e.life * 8) % 2) continue;
+        ctx.save();
+        ctx.shadowColor = '#ffe100'; ctx.shadowBlur = 18;
+        ctx.drawImage(SPR.oeuf, Math.round(e.x - 15), Math.round(e.y - 15 - bob));
+        ctx.restore();
+      }
+      const shadow = (x, y, w) => { ctx.fillStyle = 'rgba(0,0,0,0.22)'; ctx.beginPath(); ctx.ellipse(x, y + 20, w, 6, 0, 0, Math.PI * 2); ctx.fill(); };
+      // Poule
+      const hen = s.hen;
+      shadow(hen.x, hen.y, 16);
+      const hf = SPR.poule[hen.face][Math.floor(hen.frame) % 2];
+      if (hen.sprint > 0) { ctx.globalAlpha = 0.3; ctx.drawImage(hf, Math.round(hen.x - 24 - hen.vx * 0.05), Math.round(hen.y - 26 - hen.vy * 0.05)); ctx.globalAlpha = 1; }
+      ctx.drawImage(hf, Math.round(hen.x - 24), Math.round(hen.y - 26));
+      // Renards
+      for (const f of s.foxes) {
+        shadow(f.x, f.y - 8, 20);
+        if (s.scare > 0) ctx.globalAlpha = 0.65 + Math.sin(s.t * 20) * 0.2;
+        ctx.drawImage(SPR.renard[f.face][Math.floor(f.frame) % 2], Math.round(f.x - 24), Math.round(f.y - 28));
+        ctx.globalAlpha = 1;
+      }
+      ctx.font = '600 16px "JetBrains Mono", monospace';
+      ctx.textAlign = 'center';
+      for (const f of s.floats) {
+        ctx.globalAlpha = Math.min(1, f.life * 1.5);
+        ctx.fillStyle = '#0e0e10'; ctx.fillText(f.text, f.x + 1, f.y + 1);
+        ctx.fillStyle = f.color; ctx.fillText(f.text, f.x, f.y);
+      }
+      ctx.globalAlpha = 1;
+      if (paused) {
+        ctx.fillStyle = 'rgba(0,0,0,0.45)'; ctx.fillRect(0, 0, W, H);
+        ctx.fillStyle = '#fff'; ctx.font = '600 28px Onest, sans-serif'; ctx.fillText('Pause — P pour reprendre', W / 2, H / 2);
+      }
+    }
+
+    function gameOver() {
+      running = false;
+      const score = Math.floor(state.score);
+      const record = score > best;
+      if (record) { best = score; localStorage.setItem('pouley-best', String(best)); document.getElementById('best').textContent = best; }
+      document.getElementById('final').textContent = score;
+      document.getElementById('over-msg').textContent = record ? '🏆 Nouveau record ! Le renard est jaloux.' :
+        `Tu as tenu ${Math.floor(state.t)} secondes. Record : ${best}.`;
+      document.getElementById('over').classList.remove('hidden');
+    }
+
+    function loop(ts) {
+      const dt = Math.min(0.05, (ts - last) / 1000 || 0);
+      last = ts;
+      if (running && !paused) update(dt);
+      draw();
+      requestAnimationFrame(loop);
+    }
+
+    addEventListener('keydown', (e) => {
+      const k = e.key.toLowerCase();
+      if (k === 'enter' || (k === ' ' && !running)) {
+        if (!running) { newGame(); e.preventDefault(); return; }
+      }
+      if (k === 'p' || k === 'escape') { if (running) paused = !paused; return; }
+      if (k === ' ' && running && state.hen.cooldown <= 0) { state.hen.sprint = 0.6; state.hen.cooldown = 3; }
+      if (k.startsWith('arrow') || k === ' ') e.preventDefault();
+      keys.add(k);
+    });
+    addEventListener('keyup', (e) => keys.delete(e.key.toLowerCase()));
+    addEventListener('blur', () => { keys.clear(); if (running) paused = true; });
+    cv.addEventListener('mousedown', (e) => { mouse.down = true; mouse.x = e.clientX; mouse.y = e.clientY; });
+    addEventListener('mousemove', (e) => { mouse.x = e.clientX; mouse.y = e.clientY; });
+    addEventListener('mouseup', () => { mouse.down = false; });
+    document.getElementById('play').onclick = newGame;
+    document.getElementById('again').onclick = newGame;
+
+    // Mode hors ligne : bandeau + retour automatique proposé quand le réseau revient
+    const q = new URLSearchParams(location.search);
+    const back = q.get('url');
+    const banner = document.getElementById('offline');
+    if (location.hostname === 'offline') {
+      banner.classList.add('show');
+      const retry = document.getElementById('retry');
+      const update = () => {
+        if (navigator.onLine) {
+          banner.classList.add('online');
+          document.getElementById('offline-text').textContent = 'La connexion est revenue ! 🎉';
+          if (back && /^https?:/.test(back)) retry.style.display = '';
+        } else {
+          banner.classList.remove('online');
+          document.getElementById('offline-text').textContent = 'Pas de connexion internet — le renard a rongé les câbles. Joue en attendant !';
+          retry.style.display = 'none';
+        }
+      };
+      retry.onclick = () => location.replace(back);
+      addEventListener('online', update);
+      addEventListener('offline', update);
+      update();
+    }
+
+    addEventListener('resize', resize);
+    resize();
+    requestAnimationFrame(loop);
+  })();
+  </script>
+</body>
+</html>

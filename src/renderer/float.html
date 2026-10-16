@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src https: data:; font-src 'self'" />
+  <title>PouleyPwolu — superposition</title>
+  <style>
+    @font-face { font-family: 'Onest'; src: url('../../assets/Onest-Medium.ttf'); }
+    html, body { margin: 0; height: 100%; background: #111113; color: #c9c9d0; font: 12px 'Onest', 'Segoe UI', sans-serif; overflow: hidden; user-select: none; }
+    .bar {
+      height: 36px; display: flex; align-items: center; gap: 6px; padding: 0 6px 0 10px; box-sizing: border-box;
+      background: linear-gradient(180deg, #1b1b1e, #141416); border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+      -webkit-app-region: drag;
+    }
+    .bar button, .bar input { -webkit-app-region: no-drag; }
+    .logo { width: 18px; height: 18px; flex: none; }
+    .fav { width: 16px; height: 16px; border-radius: 4px; flex: none; }
+    .title { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #f4f4f5; font-weight: 500; }
+    button {
+      width: 26px; height: 26px; border: 0; border-radius: 7px; background: none; color: #8b8b95; cursor: pointer;
+      display: grid; place-items: center; padding: 0; flex: none;
+    }
+    button:hover { background: #26262a; color: #f4f4f5; }
+    button.close:hover { background: #ef3e36; color: #fff; }
+    svg.ic { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+    svg.ic-px { fill: currentColor; stroke: none; }
+    .op { display: flex; align-items: center; gap: 4px; color: #8b8b95; }
+    .op input { width: 70px; accent-color: #ffe100; }
+    body:not(:hover) .op, body:not(:hover) .hover-only { opacity: 0; }
+    .op, .hover-only { transition: opacity 0.2s; }
+    @media (max-width: 340px) { .op { display: none; } }
+  </style>
+</head>
+<body>
+  <div class="bar">
+    <span class="logo" id="logo"></span>
+    <img class="fav" id="fav" alt="" hidden />
+    <span class="title" id="title">Superposition</span>
+    <label class="op" title="Transparence de la fenêtre"><span id="op-ic"></span><input id="opacity" type="range" min="0.25" max="1" step="0.05" value="1" /></label>
+    <button id="back" class="hover-only" title="Précédent"></button>
+    <button id="reload" class="hover-only" title="Recharger"></button>
+    <button id="dock" title="Ramener dans le navigateur"></button>
+    <button id="close" class="close" title="Fermer la superposition (l’onglet revient dans le navigateur)"></button>
+  </div>
+  <script src="../shared/sprites.js"></script>
+  <script src="../shared/icons.js"></script>
+  <script src="float.js"></script>
+</body>
+</html>

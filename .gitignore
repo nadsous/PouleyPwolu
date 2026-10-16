@@ -1,0 +1,9 @@
+node_modules/
+dist/
+release/
+*.log
+
+# Outils locaux
+.misogi/
+.claude/
+dev-app-update.yml

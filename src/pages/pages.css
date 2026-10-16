@@ -1,0 +1,20 @@
+@font-face { font-family: 'Onest'; src: url('pouley://static/fonts/Onest-Regular.ttf'); font-weight: 400; }
+@font-face { font-family: 'Onest'; src: url('pouley://static/fonts/Onest-SemiBold.ttf'); font-weight: 600 700; }
+@font-face { font-family: 'JetBrains Mono'; src: url('pouley://static/fonts/JetBrainsMono-Regular.ttf'); }
+:root {
+  --base: #111113; --panel: #1b1b1e; --elev: #26262a; --line: rgba(255, 255, 255, 0.08);
+  --text: #c9c9d0; --muted: #8b8b95; --bright: #f4f4f5; --yellow: #ffe100; --blue: #1565d8; --red: #ef3e36;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body { background: var(--panel); color: var(--text); font: 15px/1.5 'Onest', system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+svg.px { width: 100%; height: 100%; display: block; }
+a { color: var(--yellow); }
+.btn {
+  display: inline-flex; align-items: center; gap: 8px; height: 42px; padding: 0 18px; border-radius: 12px; border: 1px solid var(--line);
+  background: var(--elev); color: var(--bright); font: 600 14px 'Onest', sans-serif; cursor: pointer; text-decoration: none;
+}
+.btn:hover { filter: brightness(1.15); }
+.btn.primary { background: var(--yellow); color: #17140a; border-color: transparent; }
+.btn.ghost { background: transparent; }

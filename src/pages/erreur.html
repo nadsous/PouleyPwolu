@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <title>Erreur</title>
+  <link rel="stylesheet" href="pouley://static/pages/pages.css" />
+  <style>
+    body { display: grid; place-items: center; }
+    main { width: min(560px, 90vw); text-align: center; }
+    .fox { width: 120px; height: 120px; margin: 0 auto 10px; animation: sniff 1.8s ease-in-out infinite; }
+    @keyframes sniff { 50% { transform: translateX(-6px) rotate(-3deg); } }
+    h1 { color: var(--bright); font-size: 24px; margin: 0 0 10px; }
+    p { margin: 0 0 8px; }
+    .url { font-family: 'JetBrains Mono', monospace; font-size: 12.5px; color: var(--muted); word-break: break-all; background: var(--elev); padding: 8px 12px; border-radius: 10px; margin: 16px 0; }
+    .actions { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin-top: 20px; }
+    .warn { color: #fbbf24; font-size: 13px; }
+    code { font-family: 'JetBrains Mono', monospace; color: var(--muted); font-size: 12px; }
+  </style>
+</head>
+<body>
+  <main>
+    <div class="fox" id="fox"></div>
+    <h1 id="title">Impossible d’atteindre la page</h1>
+    <p id="msg"></p>
+    <div class="url" id="url"></div>
+    <div class="actions" id="actions"></div>
+    <p><code id="code"></code></p>
+  </main>
+  <script src="pouley://static/shared/sprites.js"></script>
+  <script>
+    const q = new URLSearchParams(location.search);
+    const type = q.get('type') || 'generic';
+    const url = q.get('url') || '';
+    const code = q.get('code') || '';
+    document.getElementById('fox').innerHTML = PouleySprites.toSvg(PouleySprites.RENARD[0]);
+    document.getElementById('url').textContent = url;
+    if (code) document.getElementById('code').textContent = `code ${code}${q.get('desc') ? ' · ' + q.get('desc') : ''}`;
+    const actions = document.getElementById('actions');
+    const button = (label, cls, onclick) => {
+      const b = document.createElement('button');
+      b.className = 'btn ' + cls;
+      b.textContent = label;
+      b.onclick = onclick;
+      actions.append(b);
+    };
+    const safe = /^https?:\/\//i.test(url);
+    if (type === 'nohttps') {
+      document.title = 'Connexion non chiffrée';
+      document.getElementById('title').textContent = 'Ce site ne propose pas de connexion sécurisée';
+      document.getElementById('msg').innerHTML = 'Pouley a essayé la version chiffrée (HTTPS), sans succès. En continuant, tout ce que tu envoies — mots de passe, formulaires — <b>pourra être lu en chemin</b>.';
+      button('Revenir en arrière', 'primary', () => history.length > 1 ? history.back() : location.replace('pouley://newtab'));
+      if (safe) button('Continuer en HTTP (non chiffré)', 'ghost', () => location.replace('pouley://allow-http/?url=' + encodeURIComponent(url)));
+      const w = document.createElement('p');
+      w.className = 'warn';
+      w.textContent = 'L’exception ne vaut que jusqu’à la fermeture du navigateur.';
+      actions.after(w);
+    } else if (type === 'cert') {
+      document.title = 'Certificat invalide';
+      document.getElementById('title').textContent = 'Pouley a fermé la porte : certificat invalide';
+      document.getElementById('msg').textContent = 'Le certificat de sécurité de ce site est expiré, mal configuré ou contrefait. Quelqu’un pourrait se faire passer pour lui : la page n’a pas été chargée.';
+      button('Revenir en arrière', 'primary', () => history.length > 1 ? history.back() : location.replace('pouley://newtab'));
+      if (safe) button('Réessayer', 'ghost', () => location.replace(url));
+    } else {
+      document.getElementById('msg').textContent = 'Le site ne répond pas, ou l’adresse n’existe pas. Le renard aurait-il rongé les câbles ?';
+      if (safe) button('Réessayer', 'primary', () => location.replace(url));
+      button('Jouer en attendant', 'ghost', () => location.href = 'pouley://jeu');
+    }
+  </script>
+</body>
+</html>

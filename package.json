@@ -1,0 +1,135 @@
+{
+  "name": "pouleypwolu",
+  "productName": "PouleyPwolu",
+  "version": "0.1.0",
+  "description": "Navigateur Chromium léger, sans collecte, avec bouclier anti-traqueurs, détecteur de technos et poulaillers façon Arc.",
+  "main": "src/main/main.js",
+  "author": "Nadir Tounsi (Nads)",
+  "license": "SEE LICENSE IN legal/LICENSE.txt",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --dev",
+    "check": "node --check src/main/main.js && node --check src/renderer/app.js",
+    "dist": "node scripts/sync-extensions.js && node scripts/make-icons.js && electron-builder --win",
+    "dist:dir": "electron-builder --win --dir",
+    "icons": "node scripts/make-icons.js",
+    "tech-icons": "node scripts/make-tech-icons.js",
+    "brand-logos": "node scripts/make-brand-logos.js",
+    "sync-extensions": "node scripts/sync-extensions.js",
+    "update-chromium": "node scripts/update-chromium.js",
+    "release": "node scripts/release.js"
+  },
+  "devDependencies": {
+    "@lobehub/icons-static-svg": "^1.95.1",
+    "electron": "^44.8.0",
+    "electron-builder": "^26.15.3",
+    "simple-icons": "^16.35.0"
+  },
+  "build": {
+    "appId": "site.nads.pouleypwolu",
+    "productName": "PouleyPwolu",
+    "copyright": "© 2026 Nadir Tounsi (Nads)",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "src/**/*",
+      "assets/**/*",
+      "build/icon.*",
+      "package.json",
+      "extensions/**/*",
+      "legal/**/*"
+    ],
+    "asar": true,
+    "compression": "maximum",
+    "electronLanguages": [
+      "fr",
+      "en-US"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "shortcutName": "PouleyPwolu",
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico",
+      "runAfterFinish": true,
+      "deleteAppDataOnUninstall": false,
+      "installerSidebar": "build/installerSidebar.bmp",
+      "uninstallerSidebar": "build/uninstallerSidebar.bmp",
+      "license": "legal/LICENSE.txt",
+      "installerLanguages": [
+        "fr_FR"
+      ],
+      "language": "1036",
+      "unicode": true,
+      "artifactName": "PouleyPwolu-Setup-${version}.${ext}"
+    },
+    "protocols": [
+      {
+        "name": "Web",
+        "schemes": [
+          "http",
+          "https"
+        ]
+      }
+    ],
+    "asarUnpack": [
+      "extensions/**",
+      "src/main/system-media.ps1"
+    ],
+    "extraFiles": [
+      {
+        "from": "legal",
+        "to": ".",
+        "filter": [
+          "*.txt"
+        ]
+      },
+      {
+        "from": "assets",
+        "to": "licences-polices",
+        "filter": [
+          "OFL-*.txt"
+        ]
+      }
+    ],
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "nadsous",
+        "repo": "PouleyPwolu",
+        "releaseType": "release"
+      }
+    ],
+    "electronFuses": {
+      "runAsNode": false,
+      "enableCookieEncryption": true,
+      "enableNodeOptionsEnvironmentVariable": false,
+      "enableNodeCliInspectArguments": false,
+      "onlyLoadAppFromAsar": true
+    }
+  },
+  "dependencies": {
+    "electron-updater": "^6.8.9"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/nadsous/PouleyPwolu.git"
+  },
+  "homepage": "https://github.com/nadsous/PouleyPwolu"
+}

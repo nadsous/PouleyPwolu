@@ -1,0 +1,73 @@
+﻿CONTRAT DE LICENCE UTILISATEUR FINAL — PouleyPwolu
+Version 1.0 — 16 octobre 2026
+
+Titulaire des droits : Nadir Tounsi (Nads) — https://nads.site
+(ci-après « l'Auteur »)
+
+En installant, copiant ou utilisant PouleyPwolu (ci-après « le Logiciel »),
+vous acceptez le présent contrat. Si vous ne l'acceptez pas, n'installez pas
+le Logiciel.
+
+1. LICENCE ACCORDÉE
+L'Auteur vous accorde gratuitement une licence personnelle, non exclusive,
+non transférable et révocable pour installer et utiliser le Logiciel, à des
+fins privées ou professionnelles, sur tout appareil dont vous êtes
+l'utilisateur.
+
+2. CE QUI EST INTERDIT
+Sauf accord écrit de l'Auteur, et dans les limites permises par la loi
+applicable, vous ne pouvez pas :
+  a) vendre, louer, prêter ou distribuer le Logiciel contre rémunération ;
+  b) le redistribuer sous une forme modifiée, ou retirer les mentions de
+     l'Auteur, du nom « PouleyPwolu », du logo ou de la marque « Nads » ;
+  c) décompiler, désassembler ou modifier le Logiciel, sauf dans les cas
+     autorisés par la loi (notamment l'article L.122-6-1 du Code de la
+     propriété intellectuelle pour l'interopérabilité) ;
+  d) utiliser le Logiciel pour une activité illégale.
+Vous pouvez partager gratuitement l'installateur officiel, non modifié.
+
+3. PROPRIÉTÉ
+Le Logiciel, son code, son nom, son logo (la poule pixel-art), ses visuels,
+l'histoire de Pouley et le jeu « Pouley contre le Renard » restent la
+propriété de l'Auteur. Cette licence ne vous transfère aucun droit de
+propriété.
+
+4. COMPOSANTS TIERS
+Le Logiciel contient des composants libres (Chromium, Electron, NadsPDF,
+polices, icônes…) régis par leurs propres licences, listées dans le fichier
+« THIRD_PARTY_NOTICES.txt » fourni avec le Logiciel. Ces licences priment
+sur le présent contrat pour les composants concernés.
+
+5. VIE PRIVÉE
+Le Logiciel ne collecte, ne transmet ni ne vend aucune donnée personnelle :
+pas de compte, pas de télémétrie, pas de rapport de plantage, pas
+d'historique enregistré. Vos réglages restent sur votre appareil. Les sites
+que vous visitez et les services que vous choisissez (moteur de recherche,
+assistant IA, extensions) appliquent leurs propres conditions.
+
+6. ABSENCE DE GARANTIE
+Le Logiciel est fourni gratuitement, « en l'état », sans garantie d'aucune
+sorte, expresse ou implicite, notamment de bon fonctionnement, d'absence
+d'erreur ou d'adéquation à un usage particulier. La protection contre les
+traqueurs et les alertes de confidentialité réduisent les risques sans
+pouvoir garantir une protection totale.
+
+7. LIMITATION DE RESPONSABILITÉ
+Dans toute la mesure permise par la loi, l'Auteur ne pourra être tenu
+responsable d'aucun dommage direct ou indirect (perte de données, de
+revenus, interruption d'activité…) résultant de l'utilisation ou de
+l'impossibilité d'utiliser le Logiciel. Rien dans ce contrat ne limite les
+droits que vous accorde la loi en tant que consommateur.
+
+8. MISES À JOUR ET FIN DU CONTRAT
+L'Auteur peut publier des mises à jour, modifier ou arrêter le Logiciel à
+tout moment. Le contrat prend fin automatiquement si vous en violez les
+termes ; vous devez alors désinstaller le Logiciel. Vous pouvez y mettre fin
+à tout moment en le désinstallant.
+
+9. DROIT APPLICABLE
+Ce contrat est régi par le droit français. En cas de litige, une solution
+amiable sera recherchée en priorité ; à défaut, les tribunaux français
+seront compétents.
+
+Contact : https://nads.site
