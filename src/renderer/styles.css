@@ -1521,3 +1521,33 @@ textarea.v-input { height: auto; padding: 10px 12px; resize: vertical; font-fami
 .banner.vault-offer { background: color-mix(in srgb, var(--yellow) 10%, var(--panel)); border-color: color-mix(in srgb, var(--yellow) 35%, transparent); }
 .v-banner-ic { width: 28px; height: 28px; border-radius: 9px; display: grid; place-items: center; flex: none; background: #111113; color: var(--yellow); }
 .v-banner-ic svg { width: 16px; height: 16px; }
+
+/* ───────────── Extensions du Chrome Web Store */
+.ext-bar { display: flex; gap: 2px; flex: none; }
+.ext-bar:empty { display: none; }
+.ext-btn { position: relative; width: 32px; height: 32px; flex: none; display: grid; place-items: center; border-radius: 9px; background: transparent; border: 0; color: var(--muted); }
+.ext-btn:hover { background: color-mix(in srgb, var(--bright) 7%, transparent); color: var(--bright); }
+.ext-btn img { width: 18px; height: 18px; border-radius: 4px; }
+.ext-btn .icw svg { width: 16px; height: 16px; }
+.ext-badge { position: absolute; right: 1px; bottom: 2px; min-width: 14px; height: 13px; padding: 0 3px; border-radius: 7px; font-style: normal;
+  font-size: 9px; line-height: 13px; font-weight: 700; color: #fff; text-align: center; box-shadow: 0 0 0 1.5px var(--panel); }
+body.side-top .ext-btn { width: 28px; height: 28px; border-radius: 8px; }
+.ext-menu { position: fixed; z-index: 60; min-width: 220px; padding: 6px; border-radius: 14px; background: var(--panel); border: 1px solid var(--line-2);
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.35); animation: pop 0.2s var(--spring); }
+.ext-menu-group + .ext-menu-group { border-top: 1px solid var(--line); margin-top: 4px; padding-top: 4px; }
+.ext-menu-head { display: flex; align-items: center; gap: 8px; padding: 6px 8px; color: var(--bright); font-size: 13px; }
+.ext-menu-head img { width: 18px; height: 18px; border-radius: 4px; }
+.ext-menu button { display: block; width: 100%; text-align: left; padding: 7px 10px; border-radius: 8px; background: none; border: 0; color: var(--text); font-size: 13px; }
+.ext-menu button:hover { background: var(--elev); color: var(--bright); }
+.modal.ext-install { width: min(560px, 92vw); }
+.ext-install-ic { width: 40px; height: 40px; border-radius: 10px; flex: none; }
+.ext-install-desc { margin: 0; color: var(--text); font-size: 13.5px; line-height: 1.5; }
+.ext-perms { padding: 12px 14px; border-radius: 12px; background: var(--elev); font-size: 13px; color: var(--text); }
+.ext-perms b { color: var(--bright); }
+.ext-perms ul { margin: 6px 0 0; padding-left: 18px; line-height: 1.6; }
+.ext-add .v-pwrow { margin-top: 10px; }
+.ext-add .v-input { height: 36px; font-size: 13px; }
+.ext-add .btn { height: 36px; }
+.ext-card-actions { margin-top: 8px; }
+.ext-card-actions .btn { height: 28px; font-size: 12px; }
+.banner.cws-banner { background: color-mix(in srgb, var(--orange) 10%, var(--panel)); border-color: color-mix(in srgb, var(--orange) 35%, transparent); }

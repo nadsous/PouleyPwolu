@@ -917,6 +917,8 @@
         ] },
       ].filter(Boolean);
       case 'extensions': return [
+        { type: 'extadd' },
+        ...(snap.userExtensions || []).map((e) => ({ type: 'userext', ext: e, name: 'ext_' + e.id.slice(0, 6), label: e.name })),
         ...(snap.extensions || []).map((e) => ({ type: 'extcard', ext: e, set: e.setting, name: e.key, label: e.name })),
         { type: 'actions', help: 'NadsPDF ouvre automatiquement les PDF du web. Pour un fichier de ton ordinateur :', items: [
           { label: 'Ouvrir NadsPDF', cmd: 'nadspdf', run: () => { closeOverlay(); api.cmd('ext.nadspdf.open'); } },
@@ -1007,6 +1009,32 @@
         });
         return box;
       }
+      case 'extadd': {
+        const input = h('input', { class: 'v-input', placeholder: 'Adresse sur le Chrome Web Store, ex. chromewebstore.google.com/detail/proton-pass/…', spellcheck: 'false' });
+        const go = () => { if (input.value.trim()) installExtension(input.value.trim()); };
+        input.addEventListener('keydown', (e) => { if (e.key === 'Enter') go(); });
+        return h('div', { class: 'set-block ext-add' },
+          h('div', { class: 'set-txt' }, h('b', null, 'Ajouter une extension Chrome'),
+            h('p', null, 'Colle le lien d’une extension du Chrome Web Store (Proton Pass, Bitwarden, uBlock Origin Lite, Dark Reader…), ou ouvre sa page dans un onglet : un bandeau propose de l’ajouter. PouleyPwolu vérifie la signature du développeur avant d’installer.')),
+          h('div', { class: 'v-pwrow' }, input,
+            h('button', { class: 'btn nads', onclick: go }, 'Installer'),
+            h('button', { class: 'btn', onclick: () => { closeOverlay(); api.cmd('tab.new', { url: 'https://chromewebstore.google.com/' }); } }, 'Parcourir le store')));
+      }
+      case 'userext': {
+        const e = it.ext;
+        const on = e.enabled !== false && e.available;
+        return h('div', { class: 'set-ext' + (on ? ' on' : '') },
+          e.icon ? h('img', { class: 'set-ext-ic', src: e.icon, alt: '' }) : h('span', { class: 'set-ext-ic', html: I.svg('extension') }),
+          h('div', { class: 'set-txt' },
+            h('div', { class: 'set-ext-title' }, h('b', null, e.name), e.version ? h('span', { class: 'set-ext-ver' }, 'v' + e.version) : null),
+            h('p', null, e.description || ''),
+            e.permissions && e.permissions.length ? h('span', { class: 'set-ext-status' }, 'Peut : ' + e.permissions.slice(0, 3).join(' · ').toLowerCase()) : null,
+            h('div', { class: 'set-actions ext-card-actions' },
+              e.options ? h('button', { class: 'btn', onclick: () => { closeOverlay(); api.cmd('ext.options', e.id); } }, 'Options') : null,
+              h('button', { class: 'btn', onclick: () => api.cmd('ext.pin', { id: e.id, on: e.pinned === false }) }, e.pinned === false ? 'Afficher le bouton' : 'Masquer le bouton'),
+              h('button', { class: 'btn danger', onclick: () => { if (confirm('Supprimer ' + e.name + ' et ses données ?')) api.cmd('ext.remove', e.id); } }, 'Supprimer'))),
+          h('button', { class: 'set-switch' + (on ? ' on' : ''), disabled: !e.available, title: on ? 'Désactiver' : 'Activer', onclick: () => api.cmd('ext.enable', { id: e.id, on: !on }) }, h('i')));
+      }
       case 'extcard': {
         const e = it.ext;
         const on = st[e.setting] !== false && e.available;
@@ -1070,6 +1098,15 @@
         const v = st[it.set] !== false;
         value = h('button', { class: 'tk-bool' + (v ? ' on' : ''), onclick: () => api.cmd('ext.toggle', it.ext.key) }, h('i'), tk('kw', String(v)));
         lines.push({ name: it.name, value, comment: it.ext.name + ' ' + (it.ext.version || '') });
+        continue;
+      } else if (it.type === 'userext') {
+        const v = it.ext.enabled !== false;
+        value = h('button', { class: 'tk-bool' + (v ? ' on' : ''), onclick: () => api.cmd('ext.enable', { id: it.ext.id, on: !v }) }, h('i'), tk('kw', String(v)));
+        lines.push({ name: it.name, value, comment: it.ext.name + ' ' + (it.ext.version || '') + ' (Chrome Web Store)' });
+        continue;
+      } else if (it.type === 'extadd') {
+        lines.push({ raw: h('span', { class: 'tk-cmd' }, tk('pn', '$ '), tk('fn', 'pouley'), ' ', tk('st', 'extension --ajouter <lien du Chrome Web Store>'), '  ',
+          h('button', { class: 'tk-lens', onclick: () => { settingsView = 'simple'; localStorage.setItem('pouley-settings-view', 'simple'); renderSettingsBody(); setTimeout(() => { const i = ov.querySelector('.ext-add input'); if (i) i.focus(); }, 50); } }, '▶ Exécuter')) });
         continue;
       }
       if (value) { lines.push({ name: it.name, value, comment: it.label }); continue; }
@@ -1710,6 +1747,93 @@
     scheduleLayout();
   });
 
+
+  // ───────────────────────────────────────────── extensions du Chrome Web Store
+  function renderExtBar() {
+    const bar = $('#ext-bar');
+    if (!bar || !snap) return;
+    const list = (snap.userExtensions || []).filter((e) => e.enabled !== false && e.available);
+    const key = JSON.stringify(list.map((e) => [e.id, e.pinned, e.badge && e.badge.text, e.badge && e.badge.color]));
+    if (bar.dataset.key === key) return;
+    bar.dataset.key = key;
+    const pinned = list.filter((e) => e.pinned !== false);
+    const others = list.filter((e) => e.pinned === false);
+    bar.replaceChildren(...[...pinned.map((e) => h('button', {
+      class: 'ext-btn', title: (e.badge && e.badge.title) || e.name,
+      onclick: (ev) => openExtPopup(e.id, ev.currentTarget),
+      oncontextmenu: (ev) => { ev.preventDefault(); extMenu(e, ev.currentTarget); },
+    }, e.icon ? h('img', { src: e.icon, alt: '' }) : icon('extension'),
+    e.badge && e.badge.text ? h('i', { class: 'ext-badge', style: { background: e.badge.color || '#ef3e36' } }, e.badge.text.slice(0, 4)) : null)),
+    others.length ? h('button', { class: 'ext-btn more', title: 'Autres extensions', onclick: (ev) => extMenu(null, ev.currentTarget) }, icon('extension')) : null].filter(Boolean));
+  }
+  function openExtPopup(id, el) {
+    const r = el.getBoundingClientRect();
+    api.cmd('ext.popup', { id, rect: { x: r.left, y: r.top, width: r.width, height: r.height } });
+  }
+  function extMenu(ext, el) {
+    const list = ext ? [ext] : (snap.userExtensions || []).filter((e) => e.enabled !== false && e.pinned === false);
+    const r = el.getBoundingClientRect();
+    const menu = h('div', { class: 'ext-menu', style: { left: Math.round(r.left) + 'px', top: Math.round(r.bottom + 6) + 'px' } },
+      ...list.map((e) => h('div', { class: 'ext-menu-group' },
+        h('div', { class: 'ext-menu-head' }, e.icon ? h('img', { src: e.icon, alt: '' }) : null, h('b', null, e.name)),
+        e.popup ? h('button', { onclick: () => { close(); openExtPopup(e.id, el); } }, 'Ouvrir') : null,
+        e.options ? h('button', { onclick: () => { close(); api.cmd('ext.options', e.id); } }, 'Options de l’extension') : null,
+        h('button', { onclick: () => { close(); api.cmd('ext.pin', { id: e.id, on: e.pinned === false }); } }, e.pinned === false ? 'Épingler dans la barre' : 'Retirer de la barre'),
+        h('button', { onclick: () => { close(); openSettings('extensions'); } }, 'Gérer les extensions'))));
+    const close = () => { menu.remove(); document.removeEventListener('mousedown', outside, true); };
+    const outside = (e) => { if (!menu.contains(e.target)) close(); };
+    document.addEventListener('mousedown', outside, true);
+    document.body.append(menu);
+    const mr = menu.getBoundingClientRect();
+    if (mr.right > innerWidth - 8) menu.style.left = Math.max(8, innerWidth - mr.width - 8) + 'px';
+  }
+
+  // Fenêtre d'installation : on montre ce que l'extension pourra faire.
+  async function installExtension(input) {
+    toast('Téléchargement et vérification de la signature…', { id: 'ext-install', title: 'Extension', timeout: 0 });
+    const info = await api.cmd('ext.prepare', input);
+    $('#toasts [data-toast="ext-install"]')?.remove();
+    if (!info || info.error) { toast(info ? info.error : 'Installation impossible.', { title: 'Extension', alert: true, timeout: 6000 }); return; }
+    let done = false;
+    await openOverlay('extinstall', () => h('div', { class: 'modal ext-install' },
+      h('header', { class: 'v-head' },
+        info.icon ? h('img', { class: 'ext-install-ic', src: info.icon, alt: '' }) : h('span', { class: 'v-head-ic', html: I.svg('extension') }),
+        h('div', { class: 'grow' }, h('h2', null, (info.already ? 'Mettre à jour ' : 'Ajouter ') + info.name), h('p', null, 'Version ' + info.version + ' · signature du développeur vérifiée')),
+        h('button', { class: 'icon-btn', title: 'Fermer', onclick: () => closeOverlay() }, svg(ICONS.x))),
+      h('div', { class: 'v-pad' },
+        info.description ? h('p', { class: 'ext-install-desc' }, info.description) : null,
+        info.permissions.length ? h('div', { class: 'ext-perms' }, h('b', null, 'Cette extension pourra :'), h('ul', null, ...info.permissions.map((p) => h('li', null, p)))) : null,
+        h('p', { class: 'set-help' }, 'Elle est ajoutée dans chaque poulailler. Ses données (compte, réglages) restent séparées d’un poulailler isolé à l’autre. PouleyPwolu n’a pas toutes les fonctions de Chrome : la plupart des extensions marchent, certaines en partie seulement.'),
+        h('div', { class: 'v-actions' },
+          h('button', { class: 'btn', onclick: () => closeOverlay() }, 'Annuler'),
+          h('button', { class: 'btn primary', autofocus: true, onclick: async (ev) => {
+            ev.currentTarget.disabled = true;
+            const r = await api.cmd('ext.install', info.token);
+            done = true;
+            closeOverlay();
+            if (r && r.error) toast(r.error, { title: 'Extension', alert: true });
+            else cluck('oeuf');
+          } }, info.already ? 'Mettre à jour' : 'Ajouter l’extension')))));
+    const stop = setInterval(() => { if (overlay !== 'extinstall') { clearInterval(stop); if (!done) api.cmd('ext.cancel', info.token); } }, 400);
+  }
+
+  // Sur une page du Chrome Web Store : bandeau « Ajouter à PouleyPwolu ».
+  function renderStoreBanner() {
+    const cur = current();
+    const m = cur && /^https:\/\/chromewebstore\.google\.com\/detail\/(?:[^/]+\/)?([a-p]{32})/.exec(cur.rec.url || '');
+    const old = $('#banners .cws-banner');
+    const id = m && m[1];
+    if (old && old.dataset.id === id) return;
+    if (old) { old.remove(); scheduleLayout(); }
+    if (!id) return;
+    const installed = (snap.userExtensions || []).some((e) => e.id === id);
+    $('#banners').append(h('div', { class: 'banner cws-banner', 'data-id': id },
+      h('span', { class: 'v-banner-ic', html: I.svg('extension') }),
+      h('div', { class: 'grow' }, installed ? 'Cette extension est déjà dans PouleyPwolu.' : 'Le bouton « Ajouter à Chrome » ne marche pas ici : PouleyPwolu peut l’installer pour toi.'),
+      h('button', { class: 'btn primary', onclick: () => installExtension(id) }, installed ? 'Mettre à jour' : 'Ajouter à PouleyPwolu')));
+    scheduleLayout();
+  }
+
   // ───────────────────────────────────────────── recherche dans la page
   const findbar = $('#findbar');
   const findInput = $('#find-input');
@@ -2166,6 +2290,6 @@
   }
 
   // ───────────────────────────────────────────── démarrage
-  api.on('state', (s) => { snap = s; render(); });
-  api.getState().then((s) => { snap = s; render(); });
+  api.on('state', (s) => { snap = s; render(); renderExtBar(); renderStoreBanner(); });
+  api.getState().then((s) => { snap = s; render(); renderExtBar(); renderStoreBanner(); });
 })();

@@ -20,6 +20,7 @@ const { SEARCH_ENGINES, AI_PROVIDERS, fill, keywordSearch } = require('../shared
 const { normalize } = require('../shared/icons');
 const { Vault, generate: generatePassword, parseCsv } = require('./vault');
 const { shred } = require('./seal');
+const { createExtHost } = require('./ext-host');
 
 const ROOT = path.join(__dirname, '..', '..');
 const PAGE_PRELOAD = path.join(__dirname, '..', 'preload', 'page.js');
@@ -126,6 +127,7 @@ const EXTENSIONS = [
 const extIds = new Map(); // session -> { cléExtension: id Chrome }
 const extLoading = new Map(); // session -> Promise
 const allSessions = new Set();
+let extHost = null; // extensions du Chrome Web Store (ext-host.js)
 
 function extEnabled(e) { return e.available && store && store.state.settings[e.setting] !== false; }
 
@@ -142,7 +144,7 @@ function loadExtensionsInto(ses) {
       console.warn('[extension]', e.key, err.message);
     }
   });
-  const p = Promise.all(jobs);
+  const p = Promise.all([...jobs, extHost ? extHost.loadInto(ses) : null]);
   extLoading.set(ses, p);
   return p;
 }
@@ -295,6 +297,7 @@ function configureSession(ses, partition) {
   configuredSessions.add(ses);
 
   allSessions.add(ses);
+  if (extHost) extHost.registerSession(ses);
   loadExtensionsInto(ses);
   ses.setUserAgent(cleanUserAgent(ses.getUserAgent()));
   // Le correcteur orthographique télécharge des dictionnaires chez Google : coupé.
@@ -692,6 +695,15 @@ async function bestIcon(ses, candidates, pageUrl) {
   return null;
 }
 
+function currentSession() {
+  const rt = currentTabId && runtime.get(currentTabId);
+  if (rt && rt.view) return rt.view.webContents.session;
+  const partition = partitionFor(null, activePoulailler());
+  const ses = session.fromPartition(partition);
+  configureSession(ses, partition);
+  return ses;
+}
+
 function ensureView(tabId) {
   const found = findTab(tabId);
   if (!found) return null;
@@ -853,6 +865,7 @@ function wireContents(tabId, wc) {
   wc.on('before-input-event', (event, input) => {
     if (handleShortcut(input, true)) event.preventDefault();
   });
+  if (extHost) extHost.watch(tabId, wc);
   wc.on('render-process-gone', (_e, details) => {
     if (details.reason !== 'clean-exit') sendUi('toast', { text: 'L’onglet a planté — recharge-le pour réessayer.' });
   });
@@ -900,6 +913,8 @@ function showContextMenu(tabId, wc, params) {
     if (cometAvailable()) t.push({ label: 'Ouvrir cette page dans Comet', click: () => openInComet(wc.getURL()) });
     t.push({ type: 'separator' });
   }
+  const extItems = extHost ? extHost.contextItems(params, wc) : [];
+  if (extItems.length) t.push(...extItems, { type: 'separator' });
   t.push({ label: 'Inspecter l’élément', click: () => wc.inspectElement(params.x, params.y) });
   Menu.buildFromTemplate(t).popup({ window: win });
 }
@@ -947,6 +962,7 @@ function activateTab(tabId) {
     store.state.activePoulailler = f.poulailler.id;
   }
   const rt = ensureView(tabId);
+  if (extHost) extHost.tabActivated(tabId);
   store.save();
   setTimeout(enforceAwakeLimit, 1500);
   applyLayout();
@@ -1230,6 +1246,7 @@ function snapshot() {
     versions: { chromium: process.versions.chrome, electron: process.versions.electron },
     update: updateState,
     vault: vaultStatus(),
+    userExtensions: extHost ? extHost.snapshot() : [],
     security: { stateEncrypted: !!(store && store.key), cookies: app.isPackaged, bitlocker },
   };
 }
@@ -2607,6 +2624,22 @@ const commands = {
     else unloadExtension(e);
     scheduleBroadcast();
   },
+  'ext.prepare': (input) => extHost.prepare(input),
+  'ext.install': async (token) => {
+    const info = await extHost.install(token);
+    sendUi('toast', { text: info.name + ' est installée. Son bouton est à côté de « Inspecter ».' });
+    return info;
+  },
+  'ext.cancel': (token) => extHost.cancel(token),
+  'ext.remove': (id) => extHost.remove(id),
+  'ext.enable': ({ id, on } = {}) => extHost.setEnabled(id, on),
+  'ext.pin': ({ id, on } = {}) => extHost.setPinned(id, on),
+  'ext.popup': ({ id, rect } = {}) => {
+    const b = win.getContentBounds();
+    const anchor = rect ? { x: b.x + rect.x, y: b.y + rect.y, width: rect.width, height: rect.height } : null;
+    return extHost.showPopup(id, anchor);
+  },
+  'ext.options': (id) => extHost.callApi({ ses: currentSession(), extId: id }, 'runtime.openOptionsPage', []),
   'ext.nadspdf.open': async () => {
     const url = await nadspdfUrl(null);
     if (url) openTab({ url });
@@ -2853,6 +2886,11 @@ app.whenReady().then(() => {
   Menu.setApplicationMenu(null);
   store = new Store();
   vault = new Vault(app.getPath('userData'));
+  extHost = createExtHost({
+    state: () => store.state, save: () => store.save(), sendUi, broadcast: () => scheduleBroadcast(),
+    win: () => win, currentTabId: () => currentTabId, currentSession,
+    runtime, wcToTab, allSessions, openTab, activateTab, closeTab, ensureView,
+  });
   // Verrouiller le coffre quand l'ordinateur se verrouille ou se met en veille.
   powerMonitor.on('lock-screen', () => vaultLock('ecran'));
   powerMonitor.on('suspend', () => vaultLock('veille'));
@@ -2875,6 +2913,10 @@ app.whenReady().then(() => {
     backfillIcons();
     setupUpdater();
     setTimeout(() => checkUpdates(false), 10000);
+    // Extensions du Chrome Web Store : mises à jour une fois par jour.
+    const extUpdates = () => { if (S().autoUpdate !== false && extHost.list().length) extHost.checkUpdates(); };
+    setTimeout(extUpdates, 90000);
+    setInterval(extUpdates, 24 * 3600000);
     setInterval(() => checkUpdates(false), 6 * 3600000);
   });
   setInterval(housekeeping, 60000);
