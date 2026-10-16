@@ -35,26 +35,55 @@ function derive(master, kdf) {
 }
 
 // ── Windows Hello (UserConsentVerifier) via PowerShell
+// Une application de bureau doit rattacher la demande à sa fenêtre
+// (IUserConsentVerifierInterop::RequestVerificationForWindowAsync, comme
+// Chrome) : sans fenêtre, Windows répond « Un problème est survenu ».
 const HELLO_PS = `
 Add-Type -AssemblyName System.Runtime.WindowsRuntime
 $asTask = ([System.WindowsRuntimeSystemExtensions].GetMethods() | ? { $_.Name -eq 'AsTask' -and $_.GetParameters().Count -eq 1 -and $_.GetParameters()[0].ParameterType.Name -eq 'IAsyncOperation\`1' })[0]
 function Await($op, $type) { $t = $asTask.MakeGenericMethod($type).Invoke($null, @($op)); $t.Wait(-1) | Out-Null; $t.Result }
 $null = [Windows.Security.Credentials.UI.UserConsentVerifier,Windows.Security.Credentials.UI,ContentType=WindowsRuntime]
 $V = [Windows.Security.Credentials.UI.UserConsentVerifier]
-if ($mode -eq 'check') { Await ($V::CheckAvailabilityAsync()) ([Windows.Security.Credentials.UI.UserConsentVerifierAvailability]) }
-else { Await ($V::RequestVerificationAsync('PouleyPwolu veut ouvrir ton coffre à mots de passe')) ([Windows.Security.Credentials.UI.UserConsentVerificationResult]) }
+$R = [Windows.Security.Credentials.UI.UserConsentVerificationResult]
+if ($mode -eq 'check') { Await ($V::CheckAvailabilityAsync()) ([Windows.Security.Credentials.UI.UserConsentVerifierAvailability]); exit }
+Add-Type -TypeDefinition @'
+using System;
+using System.Runtime.InteropServices;
+using System.Runtime.InteropServices.WindowsRuntime;
+[ComImport, Guid("39E050C3-4E74-441A-8DC0-B81104DF949C"), InterfaceType(ComInterfaceType.InterfaceIsIInspectable)]
+public interface IUserConsentVerifierInterop {
+  [return: MarshalAs(UnmanagedType.IInspectable)]
+  object RequestVerificationForWindowAsync(IntPtr appWindow, [MarshalAs(UnmanagedType.HString)] string message, [In] ref Guid riid);
+}
+public static class PouleyHello {
+  public static object Ask(Type verifier, IntPtr hwnd, string message) {
+    var factory = (IUserConsentVerifierInterop)WindowsRuntimeMarshal.GetActivationFactory(verifier);
+    Guid iid = new Guid("fd596ffd-2318-558f-9dbe-d21df43764a5"); // IAsyncOperation<UserConsentVerificationResult>
+    return factory.RequestVerificationForWindowAsync(hwnd, message, ref iid);
+  }
+}
+'@
+$msg = 'PouleyPwolu veut ouvrir ton coffre à mots de passe'
+Await ([PouleyHello]::Ask($V, [IntPtr][Int64]$hwnd, $msg)) $R
 `;
-function hello(mode) {
+function hello(mode, hwnd) {
   if (process.platform !== 'win32') return Promise.resolve('NotSupported');
   return new Promise((resolve) => {
-    // -EncodedCommand ne prend pas d'argument : le mode est écrit dans le script.
-    const script = `$mode = '${mode === 'check' ? 'check' : 'ask'}'\n` + HELLO_PS;
+    // -EncodedCommand ne prend pas d'argument : mode et fenêtre sont écrits dans le script.
+    const handle = /^\d+$/.test(String(hwnd || '')) ? String(hwnd) : '0';
+    const script = `$mode = '${mode === 'check' ? 'check' : 'ask'}'\n$hwnd = '${handle}'\n` + HELLO_PS;
     const encoded = Buffer.from(script, 'utf16le').toString('base64');
     const ps = spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', encoded], { windowsHide: true });
     let out = '';
+    let err = '';
     ps.stdout.on('data', (d) => { out += d; });
+    ps.stderr.on('data', (d) => { err += d; });
     ps.on('error', () => resolve('NotSupported'));
-    ps.on('close', () => resolve(out.trim().split(/\r?\n/).pop() || 'Failed'));
+    ps.on('close', () => {
+      const last = out.trim().split(/\r?\n/).pop() || 'Failed';
+      if (err) console.warn('[windows hello]', err.trim().split(/\r?\n/).slice(0, 3).join(' '));
+      resolve(last);
+    });
     setTimeout(() => { try { ps.kill(); } catch {} }, mode === 'check' ? 15000 : 120000);
   });
 }
@@ -122,9 +151,9 @@ class Vault {
     this.openWith(key);
   }
 
-  async unlockHello() {
+  async unlockHello(hwnd) {
     if (!this.hasHello()) throw new Error('Windows Hello n’est pas activé pour le coffre.');
-    const r = await hello('ask');
+    const r = await hello('ask', hwnd);
     if (r !== 'Verified') throw new Error(r === 'Canceled' ? 'Annulé.' : 'Windows Hello n’a pas confirmé ton identité.');
     let key;
     try {

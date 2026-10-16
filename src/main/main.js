@@ -2047,7 +2047,10 @@ const vaultCommands = {
   'vault.create': async ({ master, hello } = {}) => { await vault.create(master, { useHello: !!hello }); vaultTouch(); vaultChanged(); return vaultStatus(); },
   'vault.unlock': async ({ master } = {}) => { await vault.unlock(master); vaultTouch(); vaultChanged(); return vaultStatus(); },
   'vault.unlockHello': async () => {
-    await vault.unlockHello();
+    // La fenêtre Windows Hello se rattache à celle de PouleyPwolu.
+    const handle = win ? win.getNativeWindowHandle() : null;
+    const hwnd = handle ? (handle.length >= 8 ? handle.readBigUInt64LE(0) : BigInt(handle.readUInt32LE(0))).toString() : '0';
+    await vault.unlockHello(hwnd);
     if (win) win.focus();
     vaultTouch();
     vaultChanged();
