@@ -107,6 +107,55 @@ function probes(token) {
   wrap(window.Clipboard && Clipboard.prototype, 'read', () => post('clipboard'));
 }
 
+// Connexion Google : le vrai Google Chrome a chrome.app, chrome.csi et
+// chrome.loadTimes, que les scripts anti-robots de Google vérifient. Electron
+// ne les a pas : on les ajoute sur la page de connexion seulement, avec un
+// code présenté comme natif. Voir CHROME_METADATA dans main.js.
+function chromeObjects() {
+  const natives = new WeakMap();
+  const toString = Function.prototype.toString;
+  const patched = new Proxy(toString, {
+    apply(target, self, args) { return natives.has(self) ? natives.get(self) : Reflect.apply(target, self, args); },
+  });
+  natives.set(patched, 'function toString() { [native code] }');
+  Function.prototype.toString = patched;
+  const native = (name, fn) => { natives.set(fn, `function ${name}() { [native code] }`); Object.defineProperty(fn, 'name', { value: name }); return fn; };
+  const t = () => performance.timeOrigin / 1000;
+  const nav = () => performance.getEntriesByType('navigation')[0] || {};
+  const c = window.chrome || {};
+  if (!c.app) {
+    c.app = {
+      isInstalled: false,
+      InstallState: { DISABLED: 'disabled', INSTALLED: 'installed', NOT_INSTALLED: 'not_installed' },
+      RunningState: { CANNOT_RUN: 'cannot_run', READY_TO_RUN: 'ready_to_run', RUNNING: 'running' },
+      getDetails: native('getDetails', () => null),
+      getIsInstalled: native('getIsInstalled', () => false),
+      installState: native('installState', (cb) => { if (typeof cb === 'function') setTimeout(() => cb('not_installed'), 0); }),
+      runningState: native('runningState', () => 'cannot_run'),
+    };
+  }
+  if (!c.csi) {
+    c.csi = native('csi', () => ({ startE: Math.round(performance.timeOrigin), onloadT: Math.round(performance.timeOrigin + (nav().domContentLoadedEventEnd || 0)), pageT: performance.now(), tran: 15 }));
+  }
+  if (!c.loadTimes) {
+    c.loadTimes = native('loadTimes', () => {
+      const n = nav();
+      const proto = n.nextHopProtocol || 'h2';
+      return {
+        requestTime: t() + (n.requestStart || 0) / 1000, startLoadTime: t(), commitLoadTime: t() + (n.responseStart || 0) / 1000,
+        finishDocumentLoadTime: t() + (n.domContentLoadedEventEnd || 0) / 1000, finishLoadTime: t() + (n.loadEventEnd || 0) / 1000,
+        firstPaintTime: t() + ((performance.getEntriesByName('first-paint')[0] || {}).startTime || 0) / 1000, firstPaintAfterLoadTime: 0,
+        navigationType: 'Other', wasFetchedViaSpdy: proto === 'h2' || proto === 'h3', wasNpnNegotiated: true,
+        npnNegotiatedProtocol: proto, wasAlternateProtocolAvailable: false, connectionInfo: proto,
+      };
+    });
+  }
+  window.chrome = c;
+}
+if (location.hostname === 'accounts.google.com') {
+  try { contextBridge.executeInMainWorld({ func: chromeObjects }); } catch {}
+}
+
 try {
   contextBridge.executeInMainWorld({ func: probes, args: [token] });
 } catch {

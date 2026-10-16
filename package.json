@@ -1,7 +1,7 @@
 {
   "name": "pouleypwolu",
   "productName": "PouleyPwolu",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Navigateur Chromium léger, sans collecte, avec bouclier anti-traqueurs, détecteur de technos et poulaillers façon Arc.",
   "main": "src/main/main.js",
   "author": "Nadir Tounsi (Nads)",

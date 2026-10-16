@@ -251,6 +251,39 @@ function cleanUserAgent(ua) {
     .replace(/Chrome\/(\d+)[\d.]*/, 'Chrome/$1.0.0.0');
 }
 
+// Connexion Google : Google refuse les navigateurs « intégrés » (Electron) avec
+// « Ce navigateur ou cette application ne sont peut-être pas sécurisés ». Il les
+// reconnaît à leur marque : Electron s'annonce « Chromium », pas « Google
+// Chrome ». PouleyPwolu utilise le même moteur que Chrome 152 : sur la page de
+// connexion seulement, il s'annonce donc comme Google Chrome 152, dans les
+// en-têtes et dans le JavaScript (réglé par le moteur, invisible pour la page).
+const GOOGLE_LOGIN = new Set(['accounts.google.com', 'accounts.youtube.com']);
+const CHROME_MAJOR = process.versions.chrome.split('.')[0];
+const CHROME_UA = `Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${CHROME_MAJOR}.0.0.0 Safari/537.36`;
+const CHROME_BRANDS = [['Google Chrome', CHROME_MAJOR], ['Chromium', CHROME_MAJOR], ['Not?A_Brand', '24']];
+const CHROME_SEC_CH_UA = CHROME_BRANDS.map(([b, v]) => `"${b}";v="${v}"`).join(', ');
+const CHROME_METADATA = {
+  brands: CHROME_BRANDS.map(([brand, version]) => ({ brand, version })),
+  fullVersionList: CHROME_BRANDS.map(([brand, v]) => ({ brand, version: brand === 'Not?A_Brand' ? '24.0.0.0' : process.versions.chrome })),
+  fullVersion: process.versions.chrome,
+  platform: 'Windows', platformVersion: '19.0.0', architecture: 'x86', model: '', mobile: false, bitness: '64', wow64: false, formFactors: ['Desktop'],
+};
+const isGoogleLogin = (url) => { try { return GOOGLE_LOGIN.has(new URL(url).hostname); } catch { return false; } };
+async function googleIdentity(wc, on) {
+  const dbg = wc.debugger;
+  try {
+    if (on) {
+      if (!dbg.isAttached()) { dbg.attach('1.3'); wc.__googleDbg = true; }
+      await dbg.sendCommand('Emulation.setUserAgentOverride', { userAgent: CHROME_UA, platform: 'Win32', userAgentMetadata: CHROME_METADATA });
+    } else if (wc.__googleDbg) {
+      wc.__googleDbg = false;
+      if (dbg.isAttached()) dbg.detach();
+    }
+  } catch (err) {
+    console.warn('[google]', err.message);
+  }
+}
+
 function tabForContents(id) {
   const tabId = wcToTab.get(id);
   return tabId ? runtime.get(tabId) : null;
@@ -367,6 +400,13 @@ function configureSession(ses, partition) {
 
   ses.webRequest.onBeforeSendHeaders((details, cb) => {
     const h = details.requestHeaders;
+    if (isGoogleLogin(details.url)) {
+      for (const k of Object.keys(h)) if (/^user-agent$/i.test(k) || /^sec-ch-ua/i.test(k)) delete h[k];
+      h['User-Agent'] = CHROME_UA;
+      h['sec-ch-ua'] = CHROME_SEC_CH_UA;
+      h['sec-ch-ua-mobile'] = '?0';
+      h['sec-ch-ua-platform'] = '"Windows"';
+    }
     if (S().sendGpc) {
       h['Sec-GPC'] = '1';
       h['DNT'] = '1';
@@ -2945,6 +2985,12 @@ app.on('window-all-closed', () => {
 });
 
 app.on('web-contents-created', (_e, contents) => {
+  // Identité Google Chrome pour la page de connexion Google (voir CHROME_METADATA).
+  contents.on('did-start-navigation', (details) => {
+    if (!details.isMainFrame || details.isSameDocument) return;
+    const google = isGoogleLogin(details.url);
+    if (google || contents.__googleDbg) googleIdentity(contents, google);
+  });
   // Aucune vue ne doit pouvoir embarquer de <webview> ni naviguer vers des schémas exotiques.
   contents.on('will-attach-webview', (e) => e.preventDefault());
 });
