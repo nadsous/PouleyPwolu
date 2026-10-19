@@ -240,6 +240,18 @@ function searchUrl(q) {
   return fill(engine.url, q);
 }
 
+// Second choix : un moteur classique, proposé quand Perplexity (Comet) est le
+// moteur par défaut (une réponse d'IA n'est pas toujours ce qu'on cherche).
+function secondEngine() {
+  if (S().searchEngine !== 'comet') return null;
+  const k = S().searchEngine2;
+  return k && k !== 'comet' && SEARCH_ENGINES[k] ? k : 'duckduckgo';
+}
+function searchUrl2(q) {
+  const k = secondEngine();
+  return k ? fill(SEARCH_ENGINES[k].url, q) : searchUrl(q);
+}
+
 function askUrl(q) {
   const ai = AI_PROVIDERS[S().ai] || AI_PROVIDERS.claude;
   return q ? fill(ai.ask, q) : ai.home;
@@ -599,6 +611,8 @@ async function handleInternal(request) {
   switch (u.hostname) {
     case 'search':
       return Response.redirect(searchUrl(u.searchParams.get('q') || ''), 302);
+    case 'search2':
+      return Response.redirect(searchUrl2(u.searchParams.get('q') || ''), 302);
     case 'ask':
       return Response.redirect(askUrl(u.searchParams.get('q') || ''), 302);
     case 'allow-http': {
@@ -618,6 +632,9 @@ async function handleInternal(request) {
       return serveFile(page('newtab.html'), {
         '{{ENGINE}}': escapeHtml(engine.label), '{{AI}}': escapeHtml(ai.label),
         '{{ENGINE_KEY}}': escapeHtml(S().searchEngine), '{{AI_KEY}}': escapeHtml(S().ai),
+        '{{ENGINE2}}': escapeHtml(secondEngine() ? SEARCH_ENGINES[secondEngine()].label : ''),
+        '{{ENGINE2_KEY}}': escapeHtml(secondEngine() || ''),
+        '{{ENGINE2_HIDDEN}}': secondEngine() ? '' : 'hidden',
       });
     }
     case 'jeu':
@@ -1015,6 +1032,7 @@ function showContextMenu(tabId, wc, params) {
     const sel = params.selectionText.trim().slice(0, 2000);
     const short = sel.length > 28 ? sel.slice(0, 28) + '…' : sel;
     t.push({ label: `Rechercher « ${short} »`, click: () => openTab({ url: searchUrl(sel) }) });
+    if (secondEngine()) t.push({ label: `Rechercher « ${short} » sur ${SEARCH_ENGINES[secondEngine()].label}`, click: () => openTab({ url: searchUrl2(sel) }) });
     t.push({ label: `Demander à ${ai.label}`, click: () => aiAsk(`Explique-moi : « ${sel} »`) });
     const full = params.selectionText.trim().slice(0, 40000);
     t.push({ label: 'Ce texte vient-il d’une IA ?', click: () => sendUi('aidetect', { kind: 'text', text: full.slice(0, 4000), result: aiDetect.analyzeText(full) }) });

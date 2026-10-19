@@ -16,6 +16,7 @@ const DEFAULT_STATE = {
   settings: {
     ai: 'claude', // claude | chatgpt | comet
     searchEngine: 'duckduckgo', // comet | duckduckgo | brave | startpage | google
+    searchEngine2: 'duckduckgo', // second choix quand Perplexity est le moteur par défaut
     sidebarPosition: 'left', // left | right | top
     sidebarAutoHide: false,
     sidebarWidth: 264,

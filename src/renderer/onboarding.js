@@ -384,7 +384,7 @@
       const p = h('p', { class: 'ob-text' });
       panel.classList.add('wide');
       panel.append(p, cards(SEARCH_ENGINES, 'searchEngine'),
-        h('p', { class: 'ob-hint' }, '« Comet » lance tes recherches sur Perplexity, comme dans le navigateur Comet.' + (opts.cometAvailable ? ' Comet est installé : tu pourras aussi ouvrir n’importe quelle page dedans via clic droit.' : '')),
+        h('p', { class: 'ob-hint' }, '« Comet » lance tes recherches sur Perplexity, comme dans le navigateur Comet, avec un moteur classique en second choix (Ctrl+Entrée, à régler dans les Paramètres).' + (opts.cometAvailable ? ' Comet est installé : tu pourras aussi ouvrir n’importe quelle page dedans via clic droit.' : '')),
         nav().el);
       typewrite(p, 'Et pour picorer les meilleures graines du web, quel moteur de recherche ?');
     }

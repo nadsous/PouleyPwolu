@@ -2,7 +2,7 @@
 // palette de commandes, réglages, inspecteur, alertes de confidentialité.
 (() => {
   const api = window.pouley;
-  const { SEARCH_ENGINES, AI_PROVIDERS, POULAILLER_COLORS, KEYWORDS, REPO_SHORT, keywordSearch } = window.PouleyConfig;
+  const { SEARCH_ENGINES, AI_PROVIDERS, POULAILLER_COLORS, KEYWORDS, REPO_SHORT, keywordSearch, fill } = window.PouleyConfig;
   const Sp = window.PouleySprites;
   const I = window.PouleyIcons;
   const B = window.PouleyBrands;
@@ -695,6 +695,10 @@
     const s = S();
     const engine = SEARCH_ENGINES[s.searchEngine];
     const ai = AI_PROVIDERS[s.ai];
+    // Perplexity par défaut : un moteur classique en second choix (Ctrl+Entrée).
+    const k2 = s.searchEngine === 'comet' ? (SEARCH_ENGINES[s.searchEngine2] && s.searchEngine2 !== 'comet' ? s.searchEngine2 : 'duckduckgo') : null;
+    const engine2 = k2 && SEARCH_ENGINES[k2];
+    const search2 = (q) => go(fill(engine2.url, q));
 
     const go = (text) => {
       if (mode === 'split') return api.cmd('split.start', { input: text });
@@ -746,8 +750,10 @@
         } else if (looksLikeUrl(q)) {
           items.push({ kind: 'Aller', icon: svg(ICONS.globe), label: q, run: () => go(q) });
           items.push({ kind: engine.label, icon: logo(s.searchEngine, 'ico'), label: `Rechercher « ${q} »`, run: () => go(`${q} `) });
+          if (engine2) items.push({ kind: engine2.label, icon: logo(k2, 'ico'), label: `Rechercher « ${q} » sur ${engine2.label}`, run: () => search2(q) });
         } else {
           items.push({ kind: engine.label, icon: logo(s.searchEngine, 'ico'), label: `Rechercher « ${q} »`, run: () => go(q) });
+          if (engine2) items.push({ kind: engine2.label + ' · Ctrl ↵', icon: logo(k2, 'ico'), label: `Rechercher « ${q} » sur ${engine2.label}`, run: () => search2(q) });
           items.push({ kind: ai.label, icon: logo(s.ai, 'ico'), label: `Demander à ${ai.label}`, run: () => api.cmd('ai.ask', q) });
         }
       }
@@ -789,6 +795,7 @@
         const q = input.value.trim();
         if (e.shiftKey && q) { closeOverlay(); api.cmd('ai.ask', q.replace(/^\?/, '')); }
         else if (e.altKey && q) { closeOverlay(); api.cmd('tab.new', { input: q, background: true }); }
+        else if (e.ctrlKey && q && engine2) { closeOverlay(); search2(q); }
         else run(sel);
       } else if (e.key === 'Escape') closeOverlay();
     });
@@ -800,6 +807,7 @@
         h('span', null, h('kbd', null, '↵'), ' ouvrir'),
         h('span', null, h('kbd', null, 'Maj ↵'), ` demander à ${ai.label}`),
         h('span', null, h('kbd', null, 'Alt ↵'), ' en arrière-plan'),
+        engine2 ? h('span', null, h('kbd', null, 'Ctrl ↵'), ' ' + engine2.label) : null,
         h('span', { title: Object.entries(KEYWORDS).map(([k, v]) => k + ' → ' + v.label).join('\n') }, h('kbd', null, 'gh'), h('kbd', null, 'npm'), h('kbd', null, 'yt'), ' mots-clés'),
         h('span', null, h('kbd', null, 'Échap'), ' fermer'))));
     setTimeout(() => { input.focus(); input.select(); }, 30);
@@ -857,9 +865,12 @@
       case 'recherche': return [
         { type: 'choice', set: 'searchEngine', name: 'moteur', label: 'Moteur de recherche', help: 'Utilisé depuis la barre d’adresse et la page Nouvel onglet.',
           options: Object.fromEntries(Object.entries(SEARCH_ENGINES).map(([k, v]) => [k, opt(k, v.label, v.note, { logo: true })])) },
+        st.searchEngine === 'comet' ? { type: 'choice', set: 'searchEngine2', name: 'second_choix', label: 'Second choix',
+          help: 'Perplexity répond avec l’IA. Quand tu veux plutôt une liste de sites classique, ce moteur est proposé juste en dessous dans la barre d’adresse (Ctrl+Entrée), sur la page Nouvel onglet et au clic droit.',
+          options: Object.fromEntries(Object.entries(SEARCH_ENGINES).filter(([k]) => k !== 'comet').map(([k, v]) => [k, opt(k, v.label, v.note, { logo: true })])) } : null,
         { type: 'info', name: 'comet', label: 'Application Comet', value: snap.cometAvailable ? 'Installée' : 'Non installée',
           help: snap.cometAvailable ? 'Clic droit sur une page ou un lien → « Ouvrir dans Comet ».' : 'Installe Comet pour pouvoir y ouvrir une page en un clic.' },
-      ];
+      ].filter(Boolean);
       case 'barre': return [
         { type: 'choice', set: 'sidebarPosition', name: 'position', label: 'Position', help: 'À gauche comme Arc, à droite, ou en haut comme un navigateur classique.',
           options: { left: opt('gauche', 'À gauche', 'Comme Arc'), right: opt('droite', 'À droite', 'Côté droit'), top: opt('haut', 'En haut', 'Onglets classiques') } },
