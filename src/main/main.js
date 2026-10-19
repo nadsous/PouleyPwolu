@@ -20,6 +20,9 @@ const { SEARCH_ENGINES, AI_PROVIDERS, fill, keywordSearch } = require('../shared
 const { normalize } = require('../shared/icons');
 const { Vault, generate: generatePassword, parseCsv } = require('./vault');
 const { shred } = require('./seal');
+const { SessionKeep } = require('./session-keep');
+const focus = require('./focus');
+const aiDetect = require('./ai-detect');
 const { createExtHost } = require('./ext-host');
 
 const ROOT = path.join(__dirname, '..', '..');
@@ -127,6 +130,7 @@ const EXTENSIONS = [
 const extIds = new Map(); // session -> { cléExtension: id Chrome }
 const extLoading = new Map(); // session -> Promise
 const allSessions = new Set();
+let sessionKeep = null;
 let extHost = null; // extensions du Chrome Web Store (ext-host.js)
 
 function extEnabled(e) { return e.available && store && store.state.settings[e.setting] !== false; }
@@ -785,10 +789,12 @@ function ensureView(tabId) {
   return rt;
 }
 
-function destroyView(tabId) {
+// keep : l'onglet ne fait que dormir, on garde son sessionStorage pour le réveil.
+function destroyView(tabId, keep = true) {
   const rt = runtime.get(tabId);
   if (!rt || !rt.view) return;
   const view = rt.view;
+  const saved = keep ? sessionKeep.snapshot(tabId, view.webContents, rt.partition) : Promise.resolve(sessionKeep.drop(tabId));
   const fw = floats.get(tabId);
   if (fw) {
     floats.delete(tabId);
@@ -800,7 +806,7 @@ function destroyView(tabId) {
   rt.loading = false;
   wcToTab.delete(view.webContents.id);
   try { win.contentView.removeChildView(view); } catch {}
-  try { view.webContents.close(); } catch {}
+  saved.finally(() => { try { view.webContents.close(); } catch {} });
   if (rt.partition && rt.partition.startsWith('pouley-ephemere-')) {
     session.fromPartition(rt.partition).clearStorageData().catch(() => {});
   }
@@ -836,6 +842,7 @@ function wireContents(tabId, wc) {
   wc.on('did-stop-loading', () => { const r = rt(); if (r) r.loading = false; nav(); scheduleBroadcast(); setTimeout(() => pollBadges().catch(() => {}), 2500); });
   wc.on('did-navigate', (_e, url) => {
     nav();
+    { const r = rt(); if (r) r.penOn = false; } // la page change : le dessin disparaît avec elle
     if (!isErrorPage(url)) { updateRec(tabId, { url }); autoGroupTab(tabId); }
     const r = rt();
     if (r && url.startsWith('http:') && !isLocalHost(new URL(url).hostname)) {
@@ -911,6 +918,75 @@ function wireContents(tabId, wc) {
   });
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Détecteur d'IA (tout est analysé sur la machine, voir ai-detect.js).
+
+const AID_MAX_BYTES = 15 * 1024 * 1024;
+
+// Télécharge l'image avec la session de l'onglet (même cache, mêmes cookies).
+async function aidFetchImage(ses, url) {
+  if (url.startsWith('data:')) {
+    const m = /^data:[^,]*?(;base64)?,(.*)$/s.exec(url);
+    return m ? Buffer.from(m[1] ? m[2] : decodeURIComponent(m[2]), m[1] ? 'base64' : 'utf8') : null;
+  }
+  if (!/^https?:/.test(url)) return null;
+  const res = await ses.fetch(url, { signal: AbortSignal.timeout(10000) });
+  if (!res.ok) return null;
+  const len = Number(res.headers.get('content-length') || 0);
+  if (len > AID_MAX_BYTES) return null;
+  const buf = Buffer.from(await res.arrayBuffer());
+  return buf.length > AID_MAX_BYTES ? null : buf;
+}
+
+async function aidImage(ses, url, alt) {
+  let buf = null;
+  try { buf = await aidFetchImage(ses, url); } catch {}
+  if (!buf) {
+    return { url, alt, verdict: 'erreur', tool: null, signals: [{ kind: 'info', text: 'Image impossible à lire (trop lourde, protégée ou locale à la page).' }] };
+  }
+  let thumb = null;
+  try {
+    const img = nativeImage.createFromBuffer(buf);
+    if (!img.isEmpty()) thumb = img.resize({ width: 120, quality: 'good' }).toDataURL();
+  } catch {}
+  return { url, alt, thumb, ...aiDetect.analyzeImage(buf, url, { alt }) };
+}
+
+// Ce qu'on lit dans la page : le texte principal et les grandes images.
+const AID_COLLECT = `(() => {
+  const root = document.querySelector('article') || document.querySelector('main') || document.body;
+  const text = (root ? root.innerText : '').replace(/\\n{3,}/g, '\\n\\n').slice(0, 30000);
+  const seen = new Set();
+  const images = [];
+  for (const im of document.images) {
+    const src = im.currentSrc || im.src;
+    if (!src || seen.has(src) || im.naturalWidth < 200 || im.naturalHeight < 200) continue;
+    seen.add(src);
+    images.push({ src, w: im.naturalWidth, h: im.naturalHeight, alt: (im.alt || '').slice(0, 160) });
+  }
+  images.sort((a, b) => b.w * b.h - a.w * a.h);
+  return { text, images: images.slice(0, 16) };
+})()`;
+
+async function aidPage(tabId) {
+  const rt = runtime.get(tabId);
+  const wc = rt && rt.view && rt.view.webContents;
+  if (!wc || wc.isDestroyed()) return { error: 'Onglet endormi : ouvre-le pour l’analyser.' };
+  if (!/^https?:/.test(wc.getURL())) return { error: 'Page interne : rien à analyser.' };
+  let page;
+  try { page = await wc.executeJavaScriptInIsolatedWorld(1998, [{ code: AID_COLLECT }]); } catch (err) { return { error: 'Lecture de la page impossible : ' + err.message }; }
+  const text = page.text && page.text.trim().length > 200 ? aiDetect.analyzeText(page.text) : null;
+  const images = [];
+  // Quatre téléchargements à la fois, pour ne pas surcharger la connexion.
+  const queue = [...page.images];
+  await Promise.all(Array.from({ length: 4 }, async () => {
+    for (let im = queue.shift(); im; im = queue.shift()) images.push({ ...(await aidImage(wc.session, im.src, im.alt)), w: im.w, h: im.h });
+  }));
+  const order = { ia: 0, indice: 1, inconnu: 2, appareil: 3, erreur: 4 };
+  images.sort((a, b) => order[a.verdict] - order[b.verdict]);
+  return { url: wc.getURL(), text, sample: (page.text || '').slice(0, 3000), images };
+}
+
 function showContextMenu(tabId, wc, params) {
   const t = [];
   const ai = AI_PROVIDERS[S().ai] || AI_PROVIDERS.claude;
@@ -929,6 +1005,10 @@ function showContextMenu(tabId, wc, params) {
     t.push({ label: 'Ouvrir l’image dans un nouvel onglet', click: () => openTab({ url: params.srcURL, background: true }) });
     t.push({ label: 'Enregistrer l’image', click: () => wc.downloadURL(params.srcURL) });
     t.push({ label: 'Copier l’image', click: () => wc.copyImageAt(params.x, params.y) });
+    t.push({ label: 'Cette image vient-elle d’une IA ?', click: async () => {
+      sendUi('toast', { text: 'Pouley examine l’image…' });
+      sendUi('aidetect', { kind: 'image', result: await aidImage(wc.session, params.srcURL, params.altText || '') });
+    } });
     t.push({ type: 'separator' });
   }
   if (params.selectionText) {
@@ -936,6 +1016,8 @@ function showContextMenu(tabId, wc, params) {
     const short = sel.length > 28 ? sel.slice(0, 28) + '…' : sel;
     t.push({ label: `Rechercher « ${short} »`, click: () => openTab({ url: searchUrl(sel) }) });
     t.push({ label: `Demander à ${ai.label}`, click: () => aiAsk(`Explique-moi : « ${sel} »`) });
+    const full = params.selectionText.trim().slice(0, 40000);
+    t.push({ label: 'Ce texte vient-il d’une IA ?', click: () => sendUi('aidetect', { kind: 'text', text: full.slice(0, 4000), result: aiDetect.analyzeText(full) }) });
     t.push({ label: 'Copier', role: 'copy' });
     t.push({ type: 'separator' });
   }
@@ -950,6 +1032,8 @@ function showContextMenu(tabId, wc, params) {
     t.push({ type: 'separator' });
     t.push({ label: 'Inspecter le site (technos, couleurs, vie privée)', click: () => sendUi('shortcut', 'inspector') });
     t.push({ label: `Résumer la page avec ${ai.label}`, click: () => aiAskPage() });
+    t.push({ label: 'Détecter l’IA dans cette page (textes et images)', click: () => sendUi('shortcut', 'aidetect') });
+    t.push({ label: 'Écrire sur la page (stylo)', accelerator: 'CmdOrCtrl+Shift+D', click: () => penToggle() });
     if (cometAvailable()) t.push({ label: 'Ouvrir cette page dans Comet', click: () => openInComet(wc.getURL()) });
     t.push({ type: 'separator' });
   }
@@ -1044,7 +1128,7 @@ function closeTab(tabId = currentTabId) {
     return scheduleBroadcast();
   }
   const next = wasCurrent ? neighbourOf(f) : null;
-  destroyView(tabId);
+  destroyView(tabId, false);
   runtime.delete(tabId);
   f.list.splice(f.index, 1);
   normalizeGroups(f.poulailler);
@@ -1117,7 +1201,7 @@ function moveTab({ id, poulaillerId, pinned, index, favorite, groupId }) {
     normalizeGroups(targetP);
   } else delete f.rec.groupId;
   if (f.poulailler && f.poulailler !== targetP) normalizeGroups(f.poulailler);
-  if (beforePartition !== partitionFor(f.rec, targetP)) destroyView(id);
+  if (beforePartition !== partitionFor(f.rec, targetP)) destroyView(id, false);
   if (targetP && id === currentTabId) {
     targetP.activeTab = id;
     store.state.activePoulailler = targetP.id;
@@ -1268,12 +1352,15 @@ function snapshot() {
       floating: !!r.floating,
       badge: r.badge || 0,
       memMb: r.memMb || 0,
+      pen: !!r.penOn,
     };
   }
   return {
     state: store.state,
     runtime: rt,
     currentTabId,
+    // L'onglet affiché est-il un site qui distrait ? (compteur de productivité)
+    focusSite: (() => { const f = currentTabId && findTab(currentTabId); return f && S().focusEnabled !== false ? focus.distractingSite(f.rec.url, S().focusSites) : null; })(),
     aiOpen,
     cometAvailable: cometAvailable(),
     extensions: EXTENSIONS.map((e) => ({ key: e.key, setting: e.setting, name: e.name, version: e.version, description: e.description, icon: e.icon, status: e.status, available: e.available, ids: [...new Set([...extIds.values()].map((x) => x[e.key]).filter(Boolean))] })),
@@ -1390,7 +1477,7 @@ function handleShortcut(input, fromPage) {
     case 'f': return fire('find');
     case 'i': return fire('inspector');
     case 'e': setAiOpen(!aiOpen); return true;
-    case 'd': if (currentTabId) togglePin(currentTabId); return true;
+    case 'd': if (shift) { penToggle(); return true; } if (currentTabId) togglePin(currentTabId); return true;
     case 'c':
       if (!shift) return false;
       if (currentTabId) { clipboard.writeText(findTab(currentTabId)?.rec.url || ''); sendUi('toast', { text: 'Adresse copiée' }); }
@@ -1496,6 +1583,26 @@ setInterval(() => {
   } catch {}
 }, 10000);
 
+// Productivité : toutes les 15 s, le site affiché rapporte une plume ou un tender
+// (fenêtre au premier plan seulement, et pas quand tu es parti de l'ordinateur).
+const FOCUS_TICK = 15;
+setInterval(() => {
+  if (!store || !win || S().focusEnabled === false) return;
+  if (!win.isFocused() || win.isMinimized() || viewsHidden) return;
+  const f = currentTabId && findTab(currentTabId);
+  if (!f) return;
+  const rt = runtime.get(currentTabId);
+  const r = focus.tick(store.state, f.rec.url, FOCUS_TICK, {
+    idle: powerMonitor.getSystemIdleTime(), audible: !!(rt && rt.audible), sites: S().focusSites,
+  });
+  if (!r) return;
+  if (r.nudge && S().focusNudge !== false) {
+    sendUi('toast', { text: `${r.nudge.tenders} tenders aujourd’hui, surtout sur ${r.nudge.site}. Pouley préférerait des plumes !` });
+  }
+  store.save();
+  scheduleBroadcast();
+}, FOCUS_TICK * 1000);
+
 function housekeeping() {
   const now = Date.now();
   const custom = S().memoryMode === 'perso';
@@ -1508,6 +1615,8 @@ function housekeeping() {
     }
   }
   enforceAwakeLimit();
+  // Cookies écrits sur le disque chaque minute : une connexion survit à un plantage.
+  for (const ses of allSessions) ses.cookies.flushStore().catch(() => {});
   const archiveMs = (S().archiveAfterHours || 0) * 3600000;
   if (archiveMs > 0) {
     store.state.archive = store.state.archive || [];
@@ -1515,7 +1624,7 @@ function housekeeping() {
       const keep = [];
       for (const t of p.tabs) {
         if (!t.pinned && t.id !== currentTabId && now - (t.lastActive || now) > archiveMs) {
-          destroyView(t.id);
+          destroyView(t.id, false);
           runtime.delete(t.id);
           if (!t.ephemeral && /^https?:/.test(t.url)) store.state.archive.unshift({ url: t.url, title: t.title, favicon: t.favicon, at: now, poulailler: p.name });
         } else keep.push(t);
@@ -2466,7 +2575,7 @@ const commands = {
   },
 
   'poulailler.switch': (id) => switchPoulailler(id),
-  'poulailler.create': ({ name, color, icon, isolated = true, ...look } = {}) => {
+  'poulailler.create': ({ name, color, icon, isolated = false, ...look } = {}) => {
     const p = makePoulailler(String(name || 'Poulailler').slice(0, 40), validColor(color) || '#FFE100', normalize(icon));
     p.isolated = !!isolated;
     applyLook(p, look);
@@ -2483,7 +2592,7 @@ const commands = {
     if (icon) p.icon = normalize(icon);
     if (isolated != null && !!isolated !== p.isolated) {
       p.isolated = !!isolated;
-      for (const t of p.tabs) destroyView(t.id);
+      for (const t of p.tabs) destroyView(t.id, false);
       if (p.id === store.state.activePoulailler && currentTabId) activateTab(currentTabId);
     }
     store.save();
@@ -2495,7 +2604,7 @@ const commands = {
     const i = list.findIndex((p) => p.id === id);
     if (i < 0) return false;
     const [p] = list.splice(i, 1);
-    for (const t of p.tabs) { destroyView(t.id); runtime.delete(t.id); }
+    for (const t of p.tabs) { destroyView(t.id, false); runtime.delete(t.id); }
     if (p.isolated) session.fromPartition('persist:poulailler-' + p.id).clearStorageData().catch(() => {});
     if (store.state.activePoulailler === id) switchPoulailler(list[Math.max(0, i - 1)].id);
     store.save();
@@ -2540,6 +2649,26 @@ const commands = {
     if (!p.tabs.length) openTab({ url: 'pouley://newtab' });
     scheduleBroadcast();
   },
+  'aidetect.page': (tabId) => aidPage(tabId || currentTabId),
+  'pen.toggle': () => penToggle(),
+  'aidetect.text': (text) => aiDetect.analyzeText(text),
+  'focus.addSite': (input) => {
+    const site = focus.cleanSite(input);
+    if (!site) return false;
+    const s = store.state.settings;
+    if (!s.focusSites.includes(site)) s.focusSites = [...s.focusSites, site].sort();
+    store.save();
+    scheduleBroadcast();
+    return site;
+  },
+  'focus.removeSite': (site) => {
+    const s = store.state.settings;
+    s.focusSites = s.focusSites.filter((x) => x !== site);
+    store.save();
+    scheduleBroadcast();
+  },
+  'focus.resetSites': () => { store.state.settings.focusSites = [...focus.DEFAULT_SITES]; store.save(); scheduleBroadcast(); },
+  'focus.clear': () => { store.state.focus = { days: {} }; store.save(); scheduleBroadcast(); },
   'onboarding.replay': () => { store.state.onboarded = false; store.save(); scheduleBroadcast(); },
 
   inspect: (id) => inspect(id),
@@ -2711,6 +2840,7 @@ const commands = {
       { label: 'Capturer la zone visible', accelerator: 'CmdOrCtrl+Shift+S', click: () => takeShot('visible') },
       { label: 'Capturer la page entière', click: () => takeShot('full') },
       { label: 'Sélectionner une zone…', accelerator: 'CmdOrCtrl+Shift+X', click: () => sendUi('shortcut', 'shot-region') },
+      { label: 'Écrire sur la page, puis capturer…', accelerator: 'CmdOrCtrl+Shift+D', click: () => penToggle() },
       { type: 'separator' },
       { label: 'Ouvrir le dossier des captures', click: () => { fs.mkdirSync(shotDir(), { recursive: true }); shell.openPath(shotDir()); } },
     ]).popup({ window: win });
@@ -2843,6 +2973,52 @@ ipcMain.on('layout', (event, l) => {
   layout = { content: normRect(l && l.content), ai: normRect(l && l.ai), splitA: normRect(l && l.splitA), splitB: normRect(l && l.splitB) };
   applyLayout();
 });
+// Premier chargement d'un onglet réveillé : rend son sessionStorage (même site, même espace).
+// ─────────────────────────────────────────────────────────────────────────────
+// Stylo : le dessin vit dans la page (preload/page.js) ; ici on garde les
+// réglages du stylo et on fait la capture d'écran.
+
+function penToggle() {
+  const wc = currentContents();
+  if (!wc || !/^https?:|^file:/.test(wc.getURL())) return sendUi('toast', { text: 'Le stylo fonctionne sur les pages web.' });
+  wc.send('pen:toggle', S().pen);
+}
+
+const penColor = (c) => (typeof c === 'string' && /^#[0-9a-f]{6}$/i.test(c) ? c : '#EF3E36');
+const PEN_TOOLS = new Set(['main', 'pen', 'marker', 'arrow', 'eraser']);
+ipcMain.on('pen:prefs', (event, p) => {
+  if (!store || !wcToTab.has(event.sender.id) || !p || typeof p !== 'object') return;
+  const size = (n) => Math.max(1, Math.min(40, Math.round(Number(n) || 4)));
+  store.state.settings.pen = {
+    tool: PEN_TOOLS.has(p.tool) ? p.tool : 'pen',
+    color: penColor(p.color),
+    size: size(p.size),
+    pens: (Array.isArray(p.pens) ? p.pens : []).slice(0, 6).map((x) => ({
+      tool: ['pen', 'marker', 'arrow'].includes(x && x.tool) ? x.tool : 'pen', color: penColor(x && x.color), size: size(x && x.size),
+    })),
+  };
+  store.save();
+});
+ipcMain.on('pen:state', (event, on) => {
+  const r = runtime.get(wcToTab.get(event.sender.id));
+  if (!r) return;
+  r.penOn = !!on;
+  scheduleBroadcast();
+});
+ipcMain.handle('pen:shot', async (event, mode) => {
+  if (wcToTab.get(event.sender.id) !== currentTabId) return false;
+  await takeShot(mode === 'full' ? 'full' : 'visible');
+  return true;
+});
+
+ipcMain.on('page:session-restore', (event) => {
+  const tabId = wcToTab.get(event.sender.id);
+  const rt = tabId && runtime.get(tabId);
+  const main = event.senderFrame && event.senderFrame === event.sender.mainFrame;
+  // returnValue répond dès qu'on l'affecte : une seule affectation.
+  event.returnValue = sessionKeep && rt && main ? sessionKeep.take(tabId, rt.partition, event.senderFrame.origin) : null;
+});
+
 ipcMain.on('page:probe', (event, kind, isCount) => {
   const tabId = wcToTab.get(event.sender.id);
   const rt = tabId && runtime.get(tabId);
@@ -2928,6 +3104,8 @@ app.on('second-instance', (_e, argv) => {
 app.whenReady().then(() => {
   Menu.setApplicationMenu(null);
   store = new Store();
+  // Rien n'est gardé si l'utilisateur veut tout effacer en fermant.
+  sessionKeep = new SessionKeep(app.getPath('userData'), S().clearOnExit ? null : store.key);
   vault = new Vault(app.getPath('userData'));
   extHost = createExtHost({
     state: () => store.state, save: () => store.save(), sendUi, broadcast: () => scheduleBroadcast(),
@@ -2968,13 +3146,21 @@ app.whenReady().then(() => {
 
 app.on('before-quit', async (event) => {
   if (vault) vault.lock();
-  if (!store || app.__cleared || !(S().clearOnExit || S().wipeCacheOnExit !== false)) return;
+  if (!store || app.__cleared) return;
   event.preventDefault();
   app.__cleared = true;
   if (S().clearOnExit) await commands['data.clearAll']().catch(() => {});
+  else {
+    const live = [...runtime].filter(([, rt]) => rt.view).map(([id, rt]) => [id, rt.view.webContents, rt.partition]);
+    await sessionKeep.save(live).catch(() => {});
+  }
   for (const ses of allSessions) {
-    await ses.clearCache().catch(() => {});
-    await ses.clearCodeCaches({}).catch(() => {});
+    if (S().wipeCacheOnExit !== false) {
+      await ses.clearCache().catch(() => {});
+      await ses.clearCodeCaches({}).catch(() => {});
+    }
+    // Écrit tout de suite les derniers cookies (Chromium attend sinon jusqu'à 30 s).
+    await ses.cookies.flushStore().catch(() => {});
   }
   store.flush();
   app.quit();

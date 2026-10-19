@@ -6,11 +6,12 @@ const path = require('path');
 const { app } = require('electron');
 const { normalize } = require('../shared/icons');
 const { seal, unseal, writeAtomic, shred, getDataKey } = require('./seal');
+const { DEFAULT_SITES } = require('./focus');
 
 const AAD = 'pouley-state';
 
 const DEFAULT_STATE = {
-  version: 1,
+  version: 2,
   onboarded: false,
   settings: {
     ai: 'claude', // claude | chatgpt | comet
@@ -42,6 +43,10 @@ const DEFAULT_STATE = {
     vaultNever: [], // sites pour lesquels ne jamais proposer
     sleepAfterMinutes: 15,
     archiveAfterHours: 12,
+    focusEnabled: true, // compteur de plumes et de tenders
+    focusNudge: true, // petit mot quand les tenders s'accumulent
+    focusSites: DEFAULT_SITES, // sites qui distraient
+    pen: { tool: 'pen', color: '#EF3E36', size: 4, pens: [] }, // stylo : outil, couleur, épaisseur, « Mes stylos »
   },
   activePoulailler: null,
   poulaillers: [],
@@ -50,7 +55,7 @@ const DEFAULT_STATE = {
 
 function makePoulailler(name, color, icon) {
   const id = 'p' + Math.random().toString(36).slice(2, 10);
-  return { id, name, color, icon, pinned: [], tabs: [], activeTab: null, isolated: true };
+  return { id, name, color, icon, pinned: [], tabs: [], activeTab: null, isolated: false };
 }
 
 class Store {
@@ -95,6 +100,10 @@ class Store {
       state.poulaillers = [p];
       state.activePoulailler = p.id;
     }
+    // Avant la version 2, chaque poulailler avait ses propres connexions : on les
+    // partage désormais (un seul compte Proton, Google… pour tous les poulaillers).
+    if (data && (data.version || 1) < 2) for (const p of state.poulaillers) p.isolated = false;
+    state.version = DEFAULT_STATE.version;
     // Les premières versions enregistraient un emoji comme icône.
     for (const p of state.poulaillers) p.icon = normalize(p.icon);
     if (!state.poulaillers.some((p) => p.id === state.activePoulailler)) {

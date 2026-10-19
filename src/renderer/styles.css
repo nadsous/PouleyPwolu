@@ -1551,3 +1551,149 @@ body.side-top .ext-btn { width: 28px; height: 28px; border-radius: 8px; }
 .ext-card-actions { margin-top: 8px; }
 .ext-card-actions .btn { height: 28px; font-size: 12px; }
 .banner.cws-banner { background: color-mix(in srgb, var(--orange) 10%, var(--panel)); border-color: color-mix(in srgb, var(--orange) 35%, transparent); }
+
+/* ───────────── Productivité : plumes (temps utile) et tenders (sites qui distraient) */
+.focus-tool { flex: none; height: 26px; padding: 0 8px; gap: 4px; font-variant-numeric: tabular-nums; margin-left: auto; }
+.focus-tool b { font-weight: 600; color: var(--bright); min-width: 1ch; }
+.focus-tool b + .fc-ic { margin-left: 4px; }
+.fc-ic { width: 14px; height: 14px; display: grid; place-items: center; image-rendering: pixelated; }
+.fc-ic svg { width: 14px; height: 14px; }
+.fc-ic.gain { animation: fc-gain 0.6s var(--spring); }
+@keyframes fc-gain { 40% { transform: scale(1.5) rotate(-12deg); } }
+.focus-tool.tender-now { border-color: color-mix(in srgb, #e8b33c 55%, transparent); background: color-mix(in srgb, #e8b33c 12%, transparent); }
+.focus-tool.tender-now #fc-tender { animation: fc-wiggle 1.6s ease-in-out infinite; }
+@keyframes fc-wiggle { 0%, 70%, 100% { transform: none; } 80% { transform: rotate(-14deg); } 90% { transform: rotate(10deg); } }
+body.side-top .tools-row .tool.focus-tool { width: auto; }
+body.side-top .tools-row .focus-tool b { display: inline; }
+
+.focus-modal { width: min(620px, 94vw); }
+.fc-head-ic { width: 22px; height: 22px; display: grid; place-items: center; }
+.fc-head-ic svg { width: 20px; height: 20px; }
+.fc-bigs { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 16px; }
+.fc-big { display: flex; align-items: center; gap: 14px; padding: 14px 16px; border-radius: 14px; background: var(--elev); border: 1px solid var(--line); }
+.fc-big.good { border-color: color-mix(in srgb, #8fc0ff 35%, var(--line)); }
+.fc-big.bad { border-color: color-mix(in srgb, #e8b33c 40%, var(--line)); }
+.fc-big-ic { width: 44px; height: 44px; flex: none; display: grid; place-items: center; }
+.fc-big-ic svg { width: 40px; height: 40px; }
+.fc-big b { display: block; font-size: 30px; line-height: 1; color: var(--bright); font-variant-numeric: tabular-nums; }
+.fc-big span { font-size: 13px; color: var(--bright); }
+.fc-big small { display: block; font-size: 11.5px; color: var(--muted); margin-top: 2px; }
+.fc-plumage { height: 8px; border-radius: 8px; margin-top: 12px; background: color-mix(in srgb, #e8b33c 70%, transparent); overflow: hidden; }
+.fc-plumage i { display: block; height: 100%; background: linear-gradient(90deg, #8fc0ff, #f4f4f5); border-radius: 8px; transition: width 0.5s var(--spring); }
+.fc-verdict { margin: 10px 0 0; font-size: 14px; color: var(--bright); }
+.fc-now { display: flex; align-items: center; gap: 10px; margin-top: 12px; padding: 9px 12px; border-radius: 11px; background: var(--elev); font-size: 12.5px; color: var(--muted); }
+.fc-now span { flex: 1; }
+.fc-now.bad { background: color-mix(in srgb, #e8b33c 12%, var(--elev)); color: var(--bright); }
+.fc-week { display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px; }
+.fc-day { display: flex; flex-direction: column; align-items: center; gap: 3px; }
+.fc-up, .fc-down { width: 100%; max-width: 34px; height: 54px; display: flex; }
+.fc-up { align-items: flex-end; }
+.fc-down { align-items: flex-start; height: 40px; }
+.fc-up i, .fc-down i { display: block; width: 100%; border-radius: 5px; min-height: 2px; }
+.fc-up i { background: linear-gradient(#f4f4f5, #8fc0ff); }
+.fc-down i { background: linear-gradient(#e8b33c, #b85a0e); }
+.fc-day small { font-size: 10.5px; color: var(--muted); }
+.fc-day.today small { color: var(--bright); font-weight: 600; }
+.fc-sites-today { display: flex; flex-direction: column; gap: 6px; }
+.fc-row { display: grid; grid-template-columns: 120px 1fr 64px; align-items: center; gap: 10px; font-size: 12.5px; }
+.fc-row span { color: var(--bright); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fc-row i { height: 7px; border-radius: 7px; background: linear-gradient(90deg, #e8b33c, #b85a0e); }
+.fc-row b { text-align: right; color: var(--muted); font-weight: 500; }
+.fc-foot { margin-top: 16px; }
+.fc-sites { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0; }
+.fc-site { display: inline-flex; align-items: center; gap: 4px; padding: 3px 4px 3px 10px; border-radius: 20px; background: var(--elev); border: 1px solid var(--line); font-size: 12px; color: var(--bright); }
+.fc-site button { width: 18px; height: 18px; border-radius: 50%; color: var(--muted); line-height: 1; }
+.fc-site button:hover { background: var(--elev-2); color: var(--bright); }
+
+/* ───────────── Détecteur d'IA */
+.aid-card { padding: 12px; border-radius: 13px; background: var(--elev); border: 1px solid var(--line); }
+.aid-head { display: flex; align-items: center; gap: 12px; }
+.aid-head b { display: block; color: var(--bright); font-size: 14px; }
+.aid-head small { color: var(--muted); font-size: 11.5px; }
+.aid-score { min-width: 58px; height: 40px; padding: 0 8px; border-radius: 11px; display: grid; place-items: center; font-weight: 700; font-size: 16px; font-variant-numeric: tabular-nums; }
+.aid-score.ia, .aid-tag.ia { background: color-mix(in srgb, #a66cff 22%, transparent); color: #c9a6ff; }
+.aid-score.mid, .aid-tag.mid { background: color-mix(in srgb, #e8b33c 20%, transparent); color: #f2cd6b; }
+.aid-score.ok, .aid-tag.ok { background: color-mix(in srgb, #4ade80 18%, transparent); color: #7ee2a2; }
+.aid-tag.none { background: var(--elev-2); color: var(--muted); }
+.aid-meter { position: relative; height: 6px; margin: 12px 2px 4px; border-radius: 6px; background: linear-gradient(90deg, #4ade80, #e8b33c 50%, #a66cff); }
+.aid-meter i { position: absolute; top: -4px; width: 4px; height: 14px; margin-left: -2px; border-radius: 3px; background: #fff; box-shadow: 0 0 0 2px var(--panel); }
+.aid-signals { list-style: none; margin: 10px 0 0; padding: 0; display: flex; flex-direction: column; gap: 5px; font-size: 12.5px; }
+.aid-signals li { display: flex; gap: 8px; align-items: baseline; color: var(--text, var(--bright)); }
+.aid-signals .pts { flex: none; min-width: 30px; text-align: center; font-size: 11px; font-weight: 600; border-radius: 6px; padding: 1px 4px; background: var(--elev-2); color: var(--muted); }
+.aid-signals li.up .pts { color: #c9a6ff; background: color-mix(in srgb, #a66cff 16%, transparent); }
+.aid-signals li.down .pts { color: #7ee2a2; background: color-mix(in srgb, #4ade80 14%, transparent); }
+.aid-ask { margin-top: 12px; }
+.aid-note { margin: 10px 0 0; font-size: 11.5px; color: var(--muted); line-height: 1.5; }
+.aid-img { display: flex; gap: 10px; padding: 8px; border-radius: 12px; background: var(--elev); border: 1px solid var(--line); margin-bottom: 8px; }
+.aid-img img, .aid-noimg { width: 64px; height: 64px; flex: none; border-radius: 8px; object-fit: cover; background: var(--elev-2); display: grid; place-items: center; color: var(--muted); }
+.aid-img.big img, .aid-img.big .aid-noimg { width: 120px; height: 120px; }
+.aid-img-txt { min-width: 0; flex: 1; }
+.aid-tag { display: inline-block; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 6px; }
+.aid-tool { margin-left: 6px; font-size: 12px; color: var(--bright); }
+.aid-src { display: block; margin-top: 3px; color: var(--muted); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.aid-why { list-style: none; margin: 5px 0 0; padding: 0; font-size: 11.5px; line-height: 1.45; color: var(--muted); }
+.aid-why li.preuve { color: var(--bright); }
+.aid-why li.indice { color: #f2cd6b; }
+.aid-modal { width: min(560px, 94vw); }
+.aid-modal .body { padding-top: 14px; }
+
+/* ═════════════ Onglets lisibles, rangés et fluides ═════════════
+   Les titres ne se posent plus directement sur la couleur du poulailler (un
+   jaune vif rendait le texte clair illisible, surtout en fenêtre transparente
+   sur un fond d'écran clair) : la liste vit sur un plateau sombre garanti, le
+   même en thème clair (plateau blanc). Le dégradé reste visible autour. */
+:root { --tray: color-mix(in srgb, var(--base) 82%, transparent); --tray-line: color-mix(in srgb, var(--bright) 8%, transparent); --on-space: #141414; }
+.theme-light { --tray: color-mix(in srgb, #ffffff 84%, transparent); --tray-line: color-mix(in srgb, #000 8%, transparent); }
+
+body:not(.side-top) .poulailler-head {
+  margin-top: 6px; padding: 8px 8px 6px; border: 1px solid var(--tray-line); border-bottom: 0;
+  border-radius: 14px 14px 0 0; background: var(--tray);
+}
+body:not(.side-top) .lists {
+  padding: 2px 6px 8px; border: 1px solid var(--tray-line); border-top: 0;
+  border-radius: 0 0 14px 14px; background: var(--tray); scroll-padding: 8px;
+}
+.poulailler-title, .poulailler-title #poulailler-name { color: var(--bright); }
+
+/* Outils et étiquettes au-dessus du dégradé : fond garanti eux aussi. */
+body .toolbar .tool, body.glass .toolbar .tool { background: var(--tray); border-color: var(--tray-line); color: var(--text); }
+body .toolbar .tool:hover, body.glass .toolbar .tool:hover { background: var(--elev); color: var(--bright); }
+body .toolbar .tool.on, body.glass .toolbar .tool.on { background: var(--space); color: var(--on-space); }
+/* L'en-tête du poulailler et la liste forment une seule carte. */
+body:not(.side-top) .poulailler-head + .lists { margin-top: -8px; }
+.side-label { color: var(--text); }
+.tool.on { color: var(--on-space); }
+.mp-ctl .mp-play:hover { color: var(--on-space); }
+
+/* Une ligne par onglet, nette : titre lisible, état visible d'un coup d'œil. */
+.tab-list { gap: 1px; }
+.tab {
+  height: 34px; padding: 0 6px 0 10px; border-radius: 9px; color: var(--text);
+  font-size: 13px; font-weight: 500;
+  transition: background 0.15s ease, color 0.15s ease, box-shadow 0.2s ease;
+}
+.tab .title { letter-spacing: 0.005em; }
+.tab:hover { background: color-mix(in srgb, var(--bright) 7%, transparent); color: var(--bright); }
+.tab.active {
+  background: color-mix(in srgb, var(--panel) 100%, var(--bright) 6%); color: var(--bright); font-weight: 600;
+  box-shadow: 0 0 0 1px var(--tray-line) inset, 0 6px 16px -10px rgba(0, 0, 0, 0.8);
+}
+.theme-light .tab.active { background: #fff; box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.08) inset, 0 6px 16px -10px rgba(0, 0, 0, 0.35); }
+.tab.active::before { top: 8px; bottom: 8px; width: 3px; left: 1px; }
+/* En veille : plus d'italique ni de gris délavé, juste un peu plus discret. */
+.tab.asleep .title { color: var(--text); font-style: normal; opacity: 0.72; }
+.tab.asleep:hover .title, .tab.asleep.active .title { opacity: 1; }
+.tab.asleep .fi, .fav.asleep img { filter: none; opacity: 0.85; }
+.tab.ephemeral .title { font-style: normal; }
+.fi-wrap .zz { width: 10px; height: 10px; right: -4px; bottom: -3px; opacity: 0.9; }
+.fi-wrap .zz svg.ic { width: 7px; height: 7px; }
+.tab .x { transition: opacity 0.15s ease, background 0.15s ease; }
+.new-tab { border-radius: 9px; }
+.lists .divider { margin: 4px 4px; }
+
+/* Groupes d'œufs : en-tête bien séparé, onglets légèrement en retrait. */
+.egg-group { margin: 4px 0; }
+.egg-head { color: var(--bright); }
+.egg-group .egg-tabs { padding-left: 8px; border-left: 2px solid color-mix(in srgb, var(--g) 45%, transparent); margin-left: 9px; }
+
+@media (prefers-reduced-motion: reduce) { .tab { transition: none; } }

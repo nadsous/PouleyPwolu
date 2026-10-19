@@ -153,6 +153,37 @@
     '..MM..',
   ];
 
+  // Compteur de productivité : un tender pané (temps perdu) et une plume (temps utile).
+  const TENDER = [
+    '.......ooo..',
+    '.....ooMMMo.',
+    '....oMMyMMo.',
+    '...oMMMMMo..',
+    '..oMyMMMMo..',
+    '..oMMMMMo...',
+    '.oMMMyMo....',
+    '.oMMMMMo....',
+    'oMMyMMo.....',
+    'oMMMMo......',
+    '.oMMo.......',
+    '..oo........',
+  ];
+
+  const PLUME = [
+    '.........BB.',
+    '.......BBWWB',
+    '......BWWWWB',
+    '.....BWWyWB.',
+    '....BWWWWWB.',
+    '....BWWyWB..',
+    '...BWWWWB...',
+    '..BWWyWB....',
+    '..BWWWB.....',
+    '.bBBBB......',
+    '.b..........',
+    'b...........',
+  ];
+
   function toSvg(rows, opts = {}) {
     const scale = opts.scale || 1;
     const h = rows.length;
@@ -191,5 +222,5 @@
     }
   }
 
-  return { PALETTE, POULE, POULE_RUN, RENARD, OEUF, MAIS, toSvg, drawToCanvas };
+  return { PALETTE, POULE, POULE_RUN, RENARD, OEUF, MAIS, TENDER, PLUME, toSvg, drawToCanvas };
 });

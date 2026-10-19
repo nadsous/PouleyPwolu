@@ -34,6 +34,7 @@
             <span id="url-text" class="url-text">Nouvel onglet</span>
           </button>
           <button id="btn-shot" class="url-act" title="Capture d’écran du site (Ctrl+Maj+S)"></button>
+          <button id="btn-pen" class="url-act" title="Stylo : écrire sur la page puis capturer (Ctrl+Maj+D)"></button>
           <button id="btn-float" class="url-act" title="Mettre en superposition : le site flotte au-dessus de tes fenêtres (Ctrl+Maj+P)"></button>
           <button id="btn-repo" class="url-act hidden" title="Dépôt"></button>
           <button id="btn-split" class="url-act" title="Mettre côte à côte : deux sites dans la même fenêtre (Ctrl+Maj+K)"></button>
@@ -62,6 +63,9 @@
           <span id="poulailler-icon" class="p-badge"></span><span id="poulailler-name">Perso</span>
         </button>
         <span id="poulailler-lock" class="badge-iso" title="Cookies isolés des autres poulaillers">isolé</span>
+        <button class="tool focus-tool" id="btn-focus" title="Productivité : plumes = temps utile, tenders = temps sur les sites qui distraient">
+          <span class="fc-ic" id="fc-plume"></span><b id="fc-plumes">0</b><span class="fc-ic" id="fc-tender"></span><b id="fc-tenders">0</b>
+        </button>
         <button id="btn-group-auto" class="icon-btn egg-auto-btn" title="Ranger les onglets en groupes d’œufs"></button>
       </div>
 
@@ -142,6 +146,7 @@
               <button data-tab="privacy" class="on">Vie privée</button>
               <button data-tab="tech">Technos</button>
               <button data-tab="design">Charte</button>
+              <button data-tab="ai" title="Textes et images générés par IA ?">IA ?</button>
             </div>
             <button class="icon-btn" id="insp-refresh" title="Analyser à nouveau"><svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.3-5.6M20 4v5h-5"/></svg></button>
             <button class="icon-btn" id="insp-close" title="Fermer"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>

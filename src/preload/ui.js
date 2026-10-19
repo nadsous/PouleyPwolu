@@ -4,7 +4,7 @@ const { contextBridge, ipcRenderer } = require('electron');
 const EVENTS = new Set([
   'state', 'shortcut', 'privacy:alert', 'permission:ask', 'permission:done', 'find:result',
   'download', 'toast', 'fullscreen', 'peek:inside', 'cluck', 'shot:done', 'group:created', 'media', 'favpeek', 'update',
-  'vault', 'vault:open', 'vault:offer', 'vault:offer-done',
+  'vault', 'vault:open', 'vault:offer', 'vault:offer-done', 'aidetect',
 ]);
 
 contextBridge.exposeInMainWorld('pouley', {

@@ -174,6 +174,8 @@
     // Capture & superposition (dans la barre d'adresse)
     const curFloating = !!(cur && rt.floating);
     $('#btn-shot').classList.toggle('hidden', !cur || curFloating);
+    $('#btn-pen').classList.toggle('hidden', !cur || curFloating || !/^https?:|^file:/.test(cur.rec.url || ''));
+    $('#btn-pen').classList.toggle('on', !!rt.pen);
     $('#btn-float').classList.toggle('hidden', !cur);
     const repo = snap.repo;
     $('#btn-repo').classList.toggle('hidden', !repo);
@@ -208,6 +210,7 @@
     if ($('#ai-logo').dataset.k !== s.ai) { $('#ai-logo').innerHTML = B.svg(s.ai); $('#ai-logo').dataset.k = s.ai; }
     $('#btn-ai').classList.toggle('on', !!snap.aiOpen);
     $('#btn-inspector').classList.toggle('on', inspector.open);
+    renderFocusTool();
 
     // Poulailler actif
     const pIcon = $('#poulailler-icon');
@@ -241,6 +244,7 @@
 
     $('#inspector').classList.toggle('hidden', !inspector.open);
     if (overlay === 'settings') renderSettingsBody();
+    if (overlay === 'focus') renderFocusBody();
     maybeRefreshInspector();
     scheduleLayout();
 
@@ -335,7 +339,33 @@
     return el;
   }
 
+  // La liste n'est reconstruite que si quelque chose de visible a changé (l'état
+  // arrive plusieurs fois par seconde pendant un chargement) ; les onglets qui
+  // bougent glissent à leur nouvelle place au lieu de sauter (technique FLIP).
+  let tabsSig = '';
+  const calmMotion = matchMedia('(prefers-reduced-motion: reduce)');
+  function flipRender(container, build) {
+    const before = new Map();
+    for (const e of container.querySelectorAll('[data-id]')) before.set(e.dataset.id, e.getBoundingClientRect().top);
+    build();
+    if (calmMotion.matches || !before.size) return;
+    const ease = 'cubic-bezier(0.22, 1, 0.36, 1)';
+    for (const e of container.querySelectorAll('[data-id]')) {
+      const top = before.get(e.dataset.id);
+      if (top == null) {
+        e.animate([{ opacity: 0, transform: 'translateX(-10px)' }, { opacity: 1, transform: 'none' }], { duration: 240, easing: ease });
+        continue;
+      }
+      const dy = top - e.getBoundingClientRect().top;
+      if (Math.abs(dy) > 1) e.animate([{ transform: `translateY(${dy}px)` }, { transform: 'none' }], { duration: 280, easing: ease });
+    }
+  }
+
   function renderTabs(p) {
+    const sig = JSON.stringify([p.id, snap.currentTabId, p.groups || [], snap.split && splitActive(), (snap.userExtensions || []).length,
+      p.tabs.map((t) => { const r = rtOf(t.id); return [t.id, t.title, t.url, t.favicon, t.pinned, t.groupId, t.ephemeral, r.awake, r.loading, r.badge, r.audible, r.muted, r.floating]; })]);
+    if (sig === tabsSig) return;
+    tabsSig = sig;
     const pinned = p.tabs.filter((t) => t.pinned);
     // Barre du haut : les épinglés sont regroupés derrière une seule icône.
     const pb = $('#btn-pinned');
@@ -346,7 +376,7 @@
     const activePin = pinned.find((t) => t.id === snap.currentTabId);
     pb.replaceChildren(icon('epingle', 'pb-ic'), activePin ? favicon(activePin, 'pb-fav') : null, h('span', { class: 'pb-count' }, String(pinned.length)));
     const tabs = p.tabs.filter((t) => !t.pinned);
-    $('#pinned').replaceChildren(...pinned.map((t) => tabEl(t, { pinned: true })));
+    flipRender($('#pinned'), () => $('#pinned').replaceChildren(...pinned.map((t) => tabEl(t, { pinned: true }))));
     const groups = new Map((p.groups || []).map((g) => [g.id, g]));
     const nodes = [];
     const done = new Set();
@@ -358,7 +388,7 @@
         nodes.push(groupEl(g, tabs.filter((x) => x.groupId === g.id)));
       } else nodes.push(tabEl(t));
     }
-    $('#tabs').replaceChildren(...nodes);
+    flipRender($('#tabs'), () => $('#tabs').replaceChildren(...nodes));
   }
 
   function renderFavorites() {
@@ -805,6 +835,7 @@
     { id: 'coffre', file: 'coffre.lock', icon: 'cle', tint: '#ffe100', label: 'Mots de passe', desc: 'Ton coffre chiffré, qui ne quitte jamais ton ordinateur.' },
     { id: 'bouclier', file: 'bouclier.rules', icon: 'bouclier', tint: '#98c379', label: 'Vie privée', desc: 'Ce que le bouclier bloque pour te protéger.' },
     { id: 'son', file: 'son.notif', icon: 'musique', tint: '#fe7146', label: 'Sons', desc: 'Le cri de poule des notifications.' },
+    { id: 'productivite', file: 'plumes.score', icon: 'travail', tint: '#e8b33c', label: 'Productivité', desc: 'Des plumes quand tu avances, des tenders quand tu traînes sur les sites qui distraient.' },
     { id: 'legerete', file: 'legerete.ts', icon: 'etoile', tint: '#d19a66', label: 'Performances', desc: 'Garder le navigateur léger et rapide.' },
     { id: 'extensions', file: 'extensions.json', icon: 'extension', tint: '#ef3e36', label: 'Extensions', desc: 'Les extensions préinstallées, qui fonctionnent sans connexion.' },
     { id: 'donnees', file: 'donnees.sh', icon: 'effacer', tint: '#e06c75', label: 'Données', desc: 'Tout reste sur ta machine. Tu peux tout effacer.' },
@@ -886,6 +917,16 @@
         { type: 'bool', set: 'mediaPlayer', name: 'mini_lecteur', label: 'Mini-lecteur de musique', help: 'Affiche le morceau en cours (YouTube, YouTube Music, SoundCloud…) avec lecture / pause / suivant, dans la barre.' },
         { type: 'bool', set: 'mediaSystem', name: 'musique_windows', label: 'Piloter la musique des applications (Spotify…)', help: 'Affiche et contrôle aussi Spotify ou une autre application qui joue de la musique sur Windows. Spotify Web ne peut pas jouer dans PouleyPwolu (protection DRM) : utilise l’application Spotify.' },
         { type: 'actions', help: 'Écouter :', items: [['cot', 'Cot'], ['alerte', 'Alerte'], ['oeuf', 'Téléchargement'], ['notif', 'Notification']].map(([k, l]) => ({ label: '▶ ' + l, run: () => window.PouleySound.play(k, st.notifVolume ?? 0.6) })) },
+      ];
+      case 'productivite': return [
+        { type: 'bool', set: 'focusEnabled', name: 'compteur', label: 'Compter les plumes et les tenders', help: 'Toutes les 5 minutes passées sur un site de la liste ci-dessous = un tender. 5 minutes actives ailleurs = une plume. Le compteur ne tourne que quand PouleyPwolu est au premier plan et que tu es devant l’écran. Il reste sur ta machine (chiffré), 14 jours maximum.' },
+        { type: 'bool', set: 'focusNudge', name: 'petit_mot', label: 'Me prévenir quand les tenders s’accumulent', help: 'Un petit mot de Pouley tous les 3 tenders (15 minutes de distraction).' },
+        { type: 'focussites', name: 'sites_qui_distraient', label: 'Sites qui distraient', help: 'Le temps passé sur ces sites compte en tenders. Ajoute ou retire ceux que tu veux.' },
+        { type: 'actions', items: [
+          { label: 'Voir mon poulailler du jour', cmd: 'plumes --aujourdhui', run: () => openFocus() },
+          { label: 'Remettre la liste par défaut', cmd: 'plumes --liste-par-defaut', run: () => api.cmd('focus.resetSites') },
+          { label: 'Effacer le compteur', cmd: 'plumes --effacer', danger: true, run: () => { if (confirm('Effacer toutes les plumes et tous les tenders ?')) api.cmd('focus.clear'); } },
+        ] },
       ];
       case 'legerete': return [
         { type: 'memory' },
@@ -987,6 +1028,22 @@
       case 'actions':
         return h('div', { class: 'set-block' }, it.help ? h('p', { class: 'set-help' }, it.help) : null,
           h('div', { class: 'set-actions' }, ...it.items.map((a) => h('button', { class: 'btn' + (a.danger ? ' danger' : ' nads'), onclick: a.run }, a.label))));
+      case 'focussites': {
+        const input = h('input', { class: 'v-input', placeholder: 'Ajouter un site, ex. tiktok.com', spellcheck: 'false' });
+        const add = async () => {
+          const v = input.value.trim();
+          if (!v) return;
+          const site = await api.cmd('focus.addSite', v);
+          if (site) input.value = '';
+          else toast('Ce n’est pas une adresse de site valide.');
+        };
+        input.addEventListener('keydown', (e) => { if (e.key === 'Enter') add(); });
+        return h('div', { class: 'set-block' },
+          h('div', { class: 'set-txt' }, h('b', null, it.label), h('p', null, it.help)),
+          h('div', { class: 'fc-sites' }, ...(st.focusSites || []).map((site) => h('span', { class: 'fc-site' }, site,
+            h('button', { title: 'Retirer ' + site, onclick: () => api.cmd('focus.removeSite', site) }, '×')))),
+          h('div', { class: 'v-pwrow' }, input, h('button', { class: 'btn nads', onclick: add }, 'Ajouter')));
+      }
       case 'memory': {
         const box = h('div', { class: 'set-mem' }, h('p', { class: 'set-help' }, 'Mesure en cours…'));
         api.cmd('memory.report').then((r) => {
@@ -1094,6 +1151,8 @@
             onchange: (e) => set(it.set, Number(e.target.value)) }));
       } else if (it.type === 'info') {
         value = tk('st', '"' + it.value + '"');
+      } else if (it.type === 'focussites') {
+        value = h('span', null, tk('pn', '['), ...(st.focusSites || []).map((x, i) => [i ? tk('pn', ', ') : null, tk('st', '"' + x + '"')]), tk('pn', ']'));
       } else if (it.type === 'extcard') {
         const v = st[it.set] !== false;
         value = h('button', { class: 'tk-bool' + (v ? ' on' : ''), onclick: () => api.cmd('ext.toggle', it.ext.key) }, h('i'), tk('kw', String(v)));
@@ -1228,6 +1287,10 @@
     const st = document.documentElement.style;
     const light = snap && S().theme === 'light';
     st.setProperty('--space', look.color);
+    // Texte posé sur la couleur du poulailler : sombre sur une couleur claire, blanc sur une foncée.
+    const n = parseInt(String(look.color).slice(1, 7), 16);
+    const lum = Number.isFinite(n) ? (0.299 * (n >> 16) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)) / 255 : 1;
+    st.setProperty('--on-space', lum > 0.55 ? '#141414' : '#ffffff');
     st.setProperty('--space2', look.color2);
     st.setProperty('--grad', String(look.gradient));
     st.setProperty('--grain-opacity', String(look.grain * (light ? 0.5 : 1)));
@@ -1236,7 +1299,7 @@
   function openPoulaillerEditor(p) {
     const base = p || { color: POULAILLER_COLORS[snap.state.poulaillers.length % POULAILLER_COLORS.length] };
     const data = {
-      name: p ? p.name : '', icon: p ? p.icon : 'oeuf', isolated: p ? p.isolated : true,
+      name: p ? p.name : '', icon: p ? p.icon : 'oeuf', isolated: p ? p.isolated : false,
       ...lookOf(base),
     };
     // Aperçu en direct sur toute la fenêtre si on modifie le poulailler affiché.
@@ -1349,6 +1412,26 @@
     clearTimeout(inspTimer);
     inspTimer = setTimeout(() => runInspect(key), now ? 0 : 500);
   }
+  // Détecteur d'IA : une analyse par page (les images sont téléchargées une fois).
+  const aidCache = { key: null, promise: null };
+  function detectPage() {
+    const cur = current();
+    const key = cur ? cur.rec.id + '|' + cur.rec.url : '';
+    if (aidCache.key !== key || !aidCache.promise) {
+      aidCache.key = key;
+      aidCache.promise = api.cmd('aidetect.page', cur && cur.rec.id);
+    }
+    return aidCache.promise;
+  }
+  api.on('aidetect', (p) => {
+    openOverlay('aidetect', () => h('div', { class: 'modal settings aid-modal' },
+      h('header', null, h('h2', null, p.kind === 'image' ? 'Cette image vient-elle d’une IA ?' : 'Ce texte vient-il d’une IA ?'),
+        h('button', { class: 'icon-btn', onclick: () => closeOverlay() }, svg(ICONS.x))),
+      h('div', { class: 'body' }, p.kind === 'image'
+        ? [window.PouleyInspector.aiImage(p.result, true), h('p', { class: 'aid-note' }, 'Analyse faite sur ton ordinateur, à partir des informations cachées dans le fichier. Une image sans signature peut quand même venir d’une IA.')]
+        : window.PouleyInspector.aiText(p.result, { askAi: (prompt) => { closeOverlay(); api.cmd('ai.ask', prompt); }, ai: AI_PROVIDERS[S().ai], text: p.text }))));
+  });
+
   async function runInspect(key) {
     inspector.key = key;
     const body = $('#insp-body');
@@ -1362,7 +1445,7 @@
     if (inspector.key !== key) return;
     inspector.data = data;
     window.PouleyInspector.render(body, data, inspector.tab, {
-      toast, ai: AI_PROVIDERS[S().ai], askAi: (prompt) => api.cmd('ai.ask', prompt), askPage: () => api.cmd('ai.askPage'),
+      toast, ai: AI_PROVIDERS[S().ai], askAi: (prompt) => api.cmd('ai.ask', prompt), askPage: () => api.cmd('ai.askPage'), detectPage,
     });
   }
   $('#insp-tabs').addEventListener('click', (e) => {
@@ -1371,7 +1454,7 @@
     inspector.tab = b.dataset.tab;
     for (const x of $('#insp-tabs').children) x.classList.toggle('on', x === b);
     if (inspector.data) window.PouleyInspector.render($('#insp-body'), inspector.data, inspector.tab, {
-      toast, ai: AI_PROVIDERS[S().ai], askAi: (prompt) => api.cmd('ai.ask', prompt), askPage: () => api.cmd('ai.askPage'),
+      toast, ai: AI_PROVIDERS[S().ai], askAi: (prompt) => api.cmd('ai.ask', prompt), askPage: () => api.cmd('ai.askPage'), detectPage,
     });
   });
   $('#insp-refresh').addEventListener('click', () => { inspector.key = null; maybeRefreshInspector(true); });
@@ -1380,6 +1463,106 @@
     inspector.tab = tab;
     for (const x of $('#insp-tabs').children) x.classList.toggle('on', x.dataset.tab === tab);
     toggleInspector(true);
+  }
+
+  // ───────────────────────────────────────────── productivité : plumes et tenders
+  // Le processus principal compte les secondes ; ici on les convertit
+  // (5 minutes = une plume ou un tender) et on les affiche.
+  const FOCUS_UNIT = 300;
+  const dayKeyOf = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const focusDay = (d = new Date()) => (((snap.state.focus || {}).days || {})[dayKeyOf(d)]) || { good: 0, bad: 0, sites: {} };
+  const units = (secs) => Math.floor((secs || 0) / FOCUS_UNIT);
+  const fmtDur = (secs) => {
+    const m = Math.floor((secs || 0) / 60);
+    return m < 60 ? m + ' min' : Math.floor(m / 60) + ' h ' + String(m % 60).padStart(2, '0');
+  };
+  $('#fc-plume').innerHTML = Sp.toSvg(Sp.PLUME);
+  $('#fc-tender').innerHTML = Sp.toSvg(Sp.TENDER);
+  let lastFocus = null;
+  function renderFocusTool() {
+    const btn = $('#btn-focus');
+    const on = S().focusEnabled !== false;
+    btn.classList.toggle('hidden', !on);
+    if (!on) return;
+    const d = focusDay();
+    const pl = units(d.good);
+    const te = units(d.bad);
+    $('#fc-plumes').textContent = pl;
+    $('#fc-tenders').textContent = te;
+    btn.classList.toggle('tender-now', !!snap.focusSite);
+    btn.classList.toggle('on', overlay === 'focus');
+    btn.title = (snap.focusSite ? `${snap.focusSite} distrait : chaque 5 minutes ici = un tender.\n` : '') +
+      `Aujourd’hui : ${pl} plume${pl > 1 ? 's' : ''} (${fmtDur(d.good)} utiles), ${te} tender${te > 1 ? 's' : ''} (${fmtDur(d.bad)} de distraction).`;
+    if (lastFocus && (pl > lastFocus.pl || te > lastFocus.te)) {
+      const el = pl > lastFocus.pl ? $('#fc-plume') : $('#fc-tender');
+      el.classList.remove('gain'); void el.offsetWidth; el.classList.add('gain');
+    }
+    lastFocus = { pl, te };
+  }
+  $('#btn-focus').onclick = () => (overlay === 'focus' ? closeOverlay() : openFocus());
+
+  function focusVerdict(pl, te) {
+    if (!pl && !te) return 'La journée commence. 5 minutes utiles = une plume, 5 minutes sur un site qui distrait = un tender.';
+    if (!te) return 'Zéro tender : Pouley est fière de toi !';
+    if (pl >= te * 3) return 'Belle journée : bien plus de plumes que de tenders.';
+    if (pl >= te) return 'Ça va, mais les tenders te guettent.';
+    return 'Aïe, plus de tenders que de plumes… Pouley a faim de plumes.';
+  }
+
+  function openFocus() {
+    openOverlay('focus', () => h('div', { class: 'modal settings focus-modal' },
+      h('header', null, h('span', { class: 'fc-head-ic', html: Sp.toSvg(Sp.PLUME) }), h('h2', null, 'Mon poulailler du jour'),
+        h('button', { class: 'btn', onclick: () => { closeOverlay(); openSettings('productivite'); } }, 'Réglages'),
+        h('button', { class: 'icon-btn', onclick: () => closeOverlay() }, svg(ICONS.x))),
+      h('div', { class: 'body', id: 'focus-body' }))).then(renderFocusBody);
+  }
+
+  function renderFocusBody() {
+    const body = ov.querySelector('#focus-body');
+    if (!body) return;
+    const d = focusDay();
+    const pl = units(d.good);
+    const te = units(d.bad);
+    const total = pl + te;
+    const cur = current();
+    const curUrl = cur ? cur.rec.url : '';
+    const curHost = /^https?:/.test(curUrl) ? hostOf(curUrl) : '';
+
+    const big = (sprite, n, label, sub, cls) => h('div', { class: 'fc-big ' + cls },
+      h('span', { class: 'fc-big-ic', html: Sp.toSvg(sprite) }),
+      h('div', null, h('b', null, String(n)), h('span', null, label), h('small', null, sub)));
+
+    // Les 7 derniers jours : plumes vers le haut, tenders vers le bas.
+    const days = Array.from({ length: 7 }, (_, i) => { const x = new Date(); x.setDate(x.getDate() - (6 - i)); return x; });
+    const stats = days.map((x) => { const v = focusDay(x); return { x, pl: units(v.good), te: units(v.bad) }; });
+    const max = Math.max(4, ...stats.map((v) => Math.max(v.pl, v.te)));
+    const week = h('div', { class: 'fc-week' }, ...stats.map((v, i) => h('div', { class: 'fc-day' + (i === 6 ? ' today' : ''), title: `${v.pl} plumes · ${v.te} tenders` },
+      h('div', { class: 'fc-up' }, h('i', { style: { height: (v.pl / max) * 100 + '%' } })),
+      h('div', { class: 'fc-down' }, h('i', { style: { height: (v.te / max) * 100 + '%' } })),
+      h('small', null, i === 6 ? 'auj.' : v.x.toLocaleDateString('fr-FR', { weekday: 'short' })))));
+
+    const sites = Object.entries(d.sites || {}).sort((a, b) => b[1] - a[1]).slice(0, 5);
+    const top = sites.length ? sites[0][1] : 1;
+
+    body.replaceChildren(
+      h('div', { class: 'fc-bigs' },
+        big(Sp.PLUME, pl, pl > 1 ? 'plumes' : 'plume', fmtDur(d.good) + ' utiles', 'good'),
+        big(Sp.TENDER, te, te > 1 ? 'tenders' : 'tender', fmtDur(d.bad) + ' de distraction', 'bad')),
+      h('div', { class: 'fc-plumage', title: 'Part des plumes' }, h('i', { style: { width: (total ? (pl / total) * 100 : 50) + '%' } })),
+      h('p', { class: 'fc-verdict' }, focusVerdict(pl, te)),
+      snap.focusSite
+        ? h('div', { class: 'fc-now bad' }, h('span', null, `Tu es sur ${snap.focusSite} : ça compte en tenders.`),
+          h('button', { class: 'btn', onclick: () => api.cmd('focus.removeSite', snap.focusSite) }, 'Ce site ne me distrait pas'))
+        : curHost ? h('div', { class: 'fc-now' }, h('span', null, `${curHost} compte en plumes.`),
+          h('button', { class: 'btn', onclick: () => api.cmd('focus.addSite', curUrl) }, 'Ce site me distrait')) : null,
+      h('h3', null, '7 derniers jours'),
+      week,
+      h('h3', null, 'Ce qui t’a distrait aujourd’hui'),
+      sites.length
+        ? h('div', { class: 'fc-sites-today' }, ...sites.map(([site, secs]) => h('div', { class: 'fc-row' },
+          h('span', null, site), h('i', { style: { width: (secs / top) * 100 + '%' } }), h('b', null, fmtDur(secs)))))
+        : h('p', { class: 'about' }, 'Rien pour l’instant. Continue comme ça !'),
+      h('p', { class: 'about fc-foot' }, 'Le compteur tourne seulement quand PouleyPwolu est au premier plan et que tu es devant l’écran. Rien ne quitte ton ordinateur.'));
   }
 
   // ───────────────────────────────────────────── toasts, alertes, permissions
@@ -2164,6 +2347,8 @@
   $('#btn-shot').innerHTML = I.svg('capture');
   $('#btn-float').innerHTML = I.svg('superposition');
   $('#btn-shot').onclick = () => api.cmd('shot.menu');
+  $('#btn-pen').innerHTML = '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20l1-5L16 4l4 4L9 19z"/><path d="M14 6l4 4"/></svg>';
+  $('#btn-pen').onclick = () => api.cmd('pen.toggle');
   $('#btn-float').onclick = () => api.cmd('tab.float');
   $('#btn-split').innerHTML = I.svg('cote');
   $('#btn-repo').onclick = () => api.cmd('repo.menu');
@@ -2254,6 +2439,7 @@
       case 'toggle-sidebar': return toggleSidebar();
       case 'find': return snap.currentTabId && openFind();
       case 'inspector': return toggleInspector();
+      case 'aidetect': return openInspectorTab('ai');
       case 'settings': return openSettings();
       case 'edit-poulailler': return openPoulaillerEditor(activeP());
       case 'shot-region': return startRegionShot();
