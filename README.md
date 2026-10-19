@@ -1,10 +1,62 @@
-# 🐔 PouleyPwolu
+<div align="center">
 
-Navigateur **Chromium** léger, par Nads. Aucune collecte de données, un bouclier anti-traqueurs, un inspecteur qui te dit ce que chaque site récupère sur toi, ses technos et sa charte graphique. Les **poulaillers** fonctionnent comme les Spaces d'Arc.
+<img src="build/icon.png" alt="Logo PouleyPwolu : une poule jaune en pixel art" width="96">
 
-> **Aperçu (version 0.1).** [Télécharger l'installateur Windows](https://github.com/nadsous/PouleyPwolu/releases/latest). Logiciel propriétaire gratuit : voir [`legal/LICENSE.txt`](legal/LICENSE.txt).
+# PouleyPwolu
 
-## Lancer
+**Navigateur web léger et privé pour Windows, basé sur Chromium.**<br>
+Zéro télémétrie, bloqueur de traqueurs, poulaillers façon Arc, détecteur d'IA, coffre à mots de passe chiffré.
+
+[![Dernière version](https://img.shields.io/github/v/release/nadsous/PouleyPwolu?label=version&color=FFE100&labelColor=111113)](https://github.com/nadsous/PouleyPwolu/releases/latest)
+[![Téléchargements](https://img.shields.io/github/downloads/nadsous/PouleyPwolu/total?label=t%C3%A9l%C3%A9chargements&color=1565D8&labelColor=111113)](https://github.com/nadsous/PouleyPwolu/releases)
+[![Windows 10 et 11](https://img.shields.io/badge/Windows-10%20%C2%B7%2011-3BB273?labelColor=111113&logo=windows)](https://github.com/nadsous/PouleyPwolu/releases/latest)
+[![Basé sur Chromium](https://img.shields.io/badge/moteur-Chromium-EF3E36?labelColor=111113&logo=googlechrome&logoColor=white)](#mises-à-jour)
+[![Gratuit](https://img.shields.io/badge/licence-gratuit-A66CFF?labelColor=111113)](legal/LICENSE.txt)
+
+### [⬇ Télécharger PouleyPwolu pour Windows](https://github.com/nadsous/PouleyPwolu/releases/latest)
+
+<img src="docs/captures/accueil.jpg" alt="PouleyPwolu : la barre latérale avec les poulaillers, les favoris et un groupe d'onglets, à côté d'une page Wikipédia" width="900">
+
+</div>
+
+## Pourquoi PouleyPwolu ?
+
+- 🛡️ **Ta vie privée d'abord** : aucune donnée collectée, aucun compte, aucune statistique. Environ 200 traqueurs bloqués, cookies tiers refusés, HTTPS partout, alertes quand un site prend ton empreinte.
+- 🐔 **Les poulaillers**, comme les Spaces d'Arc : un pour le perso, un pour le travail, chacun avec sa couleur. Une seule connexion (Proton, Google…) partagée entre tous, ou isolée si tu préfères.
+- 🔍 **Un inspecteur de sites** : ce que la page récupère sur toi (note de A à F), ses technos avec leur logo, sa charte graphique.
+- 🤖 **Un détecteur d'IA** : repère les images générées par IA (C2PA, IPTC, Stable Diffusion, Midjourney…) et les textes qui sentent ChatGPT, sans rien envoyer sur Internet.
+- 🔐 **Un coffre à mots de passe chiffré**, avec Windows Hello. Les extensions du Chrome Web Store fonctionnent (Proton Pass, Bitwarden, uBlock Origin Lite…).
+- ✏️ **Un stylo** pour écrire sur n'importe quelle page, puis capturer l'écran.
+- 🍗 **Plumes et tenders** : un compteur de productivité. Moins de tenders (TikTok, Twitch…), plus de plumes.
+- 🪶 **Léger** : les onglets inutilisés s'endorment, l'interface est en JavaScript natif, sans framework.
+
+## Captures d'écran
+
+<table>
+<tr>
+<td width="50%"><img src="docs/captures/inspecteur.jpg" alt="Inspecteur de vie privée : note B, cookies tiers bloqués, en-têtes de sécurité"><br><b>Inspecteur, vie privée</b> : ce que le site récupère sur toi, expliqué simplement.</td>
+<td width="50%"><img src="docs/captures/technos.jpg" alt="Inspecteur des technologies d'un site : HTML, CSS, JavaScript, Tailwind CSS, GitHub Pages"><br><b>Inspecteur, technos</b> : langages, frameworks et hébergeur, avec leur logo.</td>
+</tr>
+<tr>
+<td><img src="docs/captures/detecteur-ia.jpg" alt="Détecteur d'IA : texte probablement écrit par une IA à 76 %, images générées par Stable Diffusion et Adobe Firefly"><br><b>Détecteur d'IA</b> : score du texte et signatures des images (page de démonstration).</td>
+<td><img src="docs/captures/stylo.jpg" alt="Stylo : flèche et trait rouges dessinés sur une page Wikipédia, barre d'outils du stylo"><br><b>Stylo</b> : écrire sur toute la page, Mes stylos, capture visible ou page entière.</td>
+</tr>
+<tr>
+<td><img src="docs/captures/productivite.jpg" alt="Compteur de productivité : 34 plumes, 3 tenders, graphique des 7 derniers jours"><br><b>Plumes et tenders</b> : ta journée, ta semaine, ce qui t'a distrait.</td>
+<td><img src="docs/captures/intro.jpg" alt="Histoire d'installation : Pouley construit un poulailler protégé par un bouclier, la nuit"><br><b>L'installation</b> : l'histoire de Pouley contre le Renard des Traqueurs.</td>
+</tr>
+</table>
+
+## In English
+
+**PouleyPwolu is a lightweight, privacy-first web browser for Windows, built on Chromium (Electron).** No telemetry, no account, no tracking. It blocks about 200 trackers and third-party cookies, forces HTTPS, and warns you when a site fingerprints you. It brings **Arc-style spaces** ("poulaillers"), a **site inspector** (privacy grade, tech stack detection like Wappalyzer, color palette), a local **AI content detector** for images (C2PA, IPTC, Stable Diffusion metadata) and text, an encrypted **password manager** with Windows Hello, **Chrome Web Store extensions** support, a **pen tool** to annotate any page and take screenshots, and a playful **productivity counter**. The interface is in French. Free to use (proprietary freeware).
+
+## Licence
+
+Logiciel propriétaire gratuit : voir [`legal/LICENSE.txt`](legal/LICENSE.txt) et la section [Distribuer PouleyPwolu](#distribuer-pouleypwolu).
+
+## Lancer depuis le code
+
 
 ```bash
 npm install
@@ -27,31 +79,35 @@ Pour tester sans toucher à ton profil : `POULEY_PROFILE=C:\chemin\profil-test n
 | **Bouclier** | Bloque environ 200 domaines traqueurs en 5 catégories (publicité, mesure d'audience, réseaux sociaux, empreinte, enregistrement de session). Niveaux : strict, standard ou désactivé. Bloque aussi les cookies tiers, réduit le référent à l'origine, envoie `Sec-GPC: 1` et `DNT: 1`, empêche WebRTC de révéler l'IP locale, passe tout en HTTPS (avec un avertissement si le site ne le propose pas) et refuse les certificats invalides. |
 | **Alertes** | Une notification « Pouley te prévient » apparaît quand un site lit ton canvas, demande ta carte graphique (WebGL), calcule une empreinte audio, liste tes polices, tente d'enregistrer ta session ou charge une page en HTTP. |
 | **Inspecteur** (`Ctrl+I`) | **Vie privée** : note de A à F, ce que le site récupère sur toi expliqué simplement, certificat, en-têtes de sécurité, traqueurs bloqués, domaines tiers, cookies. **Technos** : environ 120 signatures façon Wappalyzer (WordPress, Next.js, React, Shopify, Laravel, Cloudflare…) avec leur version, leur **logo officiel** et les **langages de programmation**. **Charte** : palette pondérée par surface, rôle de chaque couleur, typographies, variables CSS, export CSS ou JSON. |
-| **Poulaillers** | Les Spaces d'Arc. Chaque poulailler a son icône, sa couleur et, si tu veux, ses propres cookies (deux comptes Google côte à côte). On passe de l'un à l'autre avec `Ctrl+1…9`, `Ctrl+Alt+↑/↓` ou un glissement à deux doigts sur la barre. |
+| **Poulaillers** | Les Spaces d'Arc. Chaque poulailler a son icône et sa couleur. Les connexions (Proton, Google…) sont partagées entre tous par défaut ; un poulailler peut aussi avoir ses propres cookies (deux comptes Google côte à côte). On passe de l'un à l'autre avec `Ctrl+1…9`, `Ctrl+Alt+↑/↓` ou un glissement à deux doigts sur la barre. |
 | **Comme Arc** | Favoris en grille, onglets épinglés, palette de commandes (`Ctrl+T` / `Ctrl+L`), glisser-déposer, archivage automatique des vieux onglets, onglets éphémères (`Ctrl+Maj+N`). |
 | **Groupes d'œufs** | Onglets réunis côte à côte sous un œuf coloré (repliables, renommables, 9 couleurs). Rangement automatique par thème (Développement, IA, Vidéos, Réseaux sociaux, Achats, Docs, Actus, Musique, Mails) ou par site ; un lien ouvert depuis un groupe y reste. Bouton « Ranger » à côté du nom du poulailler, clic droit sur un onglet → « Groupe d'œufs ». |
 | **Barre** | À gauche, à droite ou en haut, avec masquage automatique possible (`Ctrl+S`). |
 | **IA** | Claude, ChatGPT ou Comet (choisi pendant l'installation), dans un panneau latéral (`Ctrl+E`). Tape `?question` dans la palette, ou `Maj+Entrée`. Clic droit → « Demander à… » / « Résumer la page ». |
 | **Comet** | Moteur de recherche « Comet (Perplexity) ». Si Comet est installé, clic droit → « Ouvrir dans Comet ». |
-| **Légèreté** | Interface en JS natif, sans framework ni dépendance d'exécution. Les onglets inactifs se mettent en veille (15 min par défaut) et ne sont restaurés qu'au clic. |
-| **Installation animée** | Au premier lancement, l'histoire de Pouley face au Renard des Traqueurs. Les choix (IA, moteur, position de la barre, premier poulailler) se font dans le récit. Pour la revoir : palette → « Revoir l'histoire de Pouley ». |
+| **Légèreté** | Interface en JS natif, sans framework ni dépendance d'exécution. Les onglets inactifs se mettent en veille (15 min par défaut) et ne sont restaurés qu'au clic. Les connexions survivent à la veille et à un redémarrage : le `sessionStorage` de chaque onglet est gardé chiffré (`pouley-session.enc`, lu puis effacé au lancement) et rendu au même site, dans le même poulailler. La liste d'onglets n'est redessinée que si quelque chose a changé, et les onglets glissent à leur place. |
+| **Détecteur d'IA** | Onglet « IA ? » de l'inspecteur, ou clic droit sur une image ou un texte sélectionné. Images : Content Credentials C2PA, champ IPTC « trainedAlgorithmicMedia », réglages Stable Diffusion et ComfyUI, nom de l'outil (Midjourney, DALL·E, Firefly, Flux…) dans les métadonnées, adresse d'un service de génération. Textes : score avec indices expliqués (formules typiques, régularité des phrases, restes de Markdown, caractères invisibles). Tout est analysé sur la machine (`src/main/ai-detect.js`). |
+| **Stylo** (`Ctrl+Maj+D`) | Écrire et dessiner sur toute la page : stylo (sensible à la pression d'un stylet), surligneur, flèche, gomme, 9 couleurs et une roue, épaisseur, annuler / rétablir. « Mes stylos » garde jusqu'à 6 réglages favoris. Capture de la zone visible ou de la page entière, dessin compris. Le calque vit dans une ombre fermée : la page ne peut pas le lire. |
+| **Plumes et tenders** | Compteur de productivité, à côté du nom du poulailler : 5 minutes sur un site qui distrait (TikTok, Twitch, Reddit…, liste modifiable) = un tender, 5 minutes actives ailleurs = une plume. Panneau du jour, 7 derniers jours, petit mot de Pouley tous les 3 tenders. Ne compte que fenêtre au premier plan et utilisateur présent ; gardé chiffré 14 jours. |
+| **Installation animée** | Au premier lancement, l'histoire de Pouley face au Renard des Traqueurs : la nuit tourne à l'aube, le poulailler se construit étape par étape puis vit (poules, traqueurs qui rebondissent sur le bouclier). Les choix (IA, moteur, position de la barre, premier poulailler) se font dans le récit. Pour la revoir : palette → « Revoir l'histoire de Pouley ». |
 | **Extensions Chrome** | Installe les extensions du Chrome Web Store (Proton Pass, Bitwarden, uBlock Origin Lite, Dark Reader…) : colle leur lien dans Paramètres → Extensions, ou ouvre leur page du store et clique « Ajouter à PouleyPwolu ». La signature CRX3 du développeur est vérifiée (l’identifiant de l’extension est l’empreinte de sa clé), les permissions sont expliquées avant l’installation, et leur bouton apparaît à côté d’« Inspecter ». Electron ne fournit qu’une partie des API de Chrome : `src/preload/ext-compat.js` ajoute celles qui manquent (onglets, fenêtres, permissions, menus, notifications, navigation) et `src/main/ext-host.js` les relie aux vrais onglets. Mises à jour vérifiées une fois par jour auprès de Google, seulement si une extension du store est installée. |
 | **Extensions** | **NadsPDF** (extension Chrome, préinstallée) : les PDF du web s'ouvrent dans l'éditeur NadsPDF (lire, annoter, remplir, signer), sans rien envoyer sur Internet. Ses règles de redirection sont reproduites par le navigateur, car Electron ne gère pas `declarativeNetRequest`. Activable dans Paramètres → Extensions. Copiée depuis `../nadspdf/dist/chrome-extension` par `npm run sync-extensions` (lancé aussi par `npm run dist`). |
 | **Jeu hors ligne** | *Pouley contre le Renard* : sans réseau, ou via `pouley://jeu`. Picore le maïs, prends les œufs d'or (ils font fuir les renards), sprinte avec `Espace`. Un renard de plus arrive toutes les 25 s. |
 
 ## Raccourcis
 
-`Ctrl+T` palette · `Ctrl+L` modifier l'adresse · `Ctrl+W` fermer · `Ctrl+Maj+T` rouvrir · `Ctrl+D` épingler · `Ctrl+I` inspecteur · `Ctrl+E` IA · `Ctrl+F` rechercher dans la page · `Ctrl+S` barre · `Ctrl+1…9` poulaillers · `Ctrl+Tab` onglet suivant · `Ctrl+Maj+C` copier l'URL · `Ctrl+,` paramètres · `F12` outils dev
+`Ctrl+T` palette · `Ctrl+L` modifier l'adresse · `Ctrl+W` fermer · `Ctrl+Maj+T` rouvrir · `Ctrl+D` épingler · `Ctrl+I` inspecteur · `Ctrl+E` IA · `Ctrl+F` rechercher dans la page · `Ctrl+S` barre · `Ctrl+1…9` poulaillers · `Ctrl+Tab` onglet suivant · `Ctrl+Maj+C` copier l'URL · `Ctrl+Maj+D` stylo · `Ctrl+Maj+S` capture · `Ctrl+,` paramètres · `F12` outils dev
 
 ## Structure
 
 ```
-src/main/       processus principal : onglets, bouclier, inspecteur, poulaillers
+src/main/       processus principal : onglets, bouclier, inspecteur, poulaillers, détecteur d'IA, compteur
 src/preload/    ponts sécurisés (interface, sondes d'empreinte dans les pages)
 src/renderer/   interface : barre, palette, réglages, inspecteur, histoire
 src/pages/      pages internes pouley:// (nouvel onglet, erreurs, jeu)
 src/shared/     sprites pixel-art et configuration partagés
-scripts/        génération des icônes et des images de l'installateur
+scripts/        génération des icônes et des images de l'installateur, publication
+docs/captures/  captures d'écran du README
 ```
 
 ## Crédits

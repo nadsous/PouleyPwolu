@@ -1514,12 +1514,15 @@
       h('header', null, h('span', { class: 'fc-head-ic', html: Sp.toSvg(Sp.PLUME) }), h('h2', null, 'Mon poulailler du jour'),
         h('button', { class: 'btn', onclick: () => { closeOverlay(); openSettings('productivite'); } }, 'Réglages'),
         h('button', { class: 'icon-btn', onclick: () => closeOverlay() }, svg(ICONS.x))),
-      h('div', { class: 'body', id: 'focus-body' }))).then(renderFocusBody);
+      h('div', { class: 'body', id: 'focus-body' }))).then(() => { renderFocusBody(); const b = ov.querySelector('#focus-body'); if (b) b.scrollTop = 0; });
   }
 
   function renderFocusBody() {
     const body = ov.querySelector('#focus-body');
     if (!body) return;
+    // Le panneau se redessine à chaque mise à jour : on garde la position de lecture.
+    const keepTop = body.scrollTop;
+    requestAnimationFrame(() => { body.scrollTop = keepTop; });
     const d = focusDay();
     const pl = units(d.good);
     const te = units(d.bad);

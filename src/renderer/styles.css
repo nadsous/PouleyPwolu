@@ -1555,6 +1555,7 @@ body.side-top .ext-btn { width: 28px; height: 28px; border-radius: 8px; }
 /* ───────────── Productivité : plumes (temps utile) et tenders (sites qui distraient) */
 .focus-tool { flex: none; height: 26px; padding: 0 8px; gap: 4px; font-variant-numeric: tabular-nums; margin-left: auto; }
 .focus-tool b { font-weight: 600; color: var(--bright); min-width: 1ch; }
+.focus-tool.on b { color: inherit; }
 .focus-tool b + .fc-ic { margin-left: 4px; }
 .fc-ic { width: 14px; height: 14px; display: grid; place-items: center; image-rendering: pixelated; }
 .fc-ic svg { width: 14px; height: 14px; }
