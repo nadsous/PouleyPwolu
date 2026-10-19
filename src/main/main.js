@@ -131,6 +131,7 @@ const extIds = new Map(); // session -> { cléExtension: id Chrome }
 const extLoading = new Map(); // session -> Promise
 const allSessions = new Set();
 let sessionKeep = null;
+let closingApp = false; // fenêtre en train de se fermer : les pages disparaissent, pas les onglets
 let extHost = null; // extensions du Chrome Web Store (ext-host.js)
 
 function extEnabled(e) { return e.available && store && store.state.settings[e.setting] !== false; }
@@ -811,7 +812,8 @@ function destroyView(tabId, keep = true) {
   const rt = runtime.get(tabId);
   if (!rt || !rt.view) return;
   const view = rt.view;
-  const saved = keep ? sessionKeep.snapshot(tabId, view.webContents, rt.partition) : Promise.resolve(sessionKeep.drop(tabId));
+  const vwc = viewContents(rt);
+  const saved = keep && vwc ? sessionKeep.snapshot(tabId, vwc, rt.partition) : Promise.resolve(sessionKeep.drop(tabId));
   const fw = floats.get(tabId);
   if (fw) {
     floats.delete(tabId);
@@ -821,9 +823,9 @@ function destroyView(tabId, keep = true) {
   }
   rt.view = null;
   rt.loading = false;
-  wcToTab.delete(view.webContents.id);
+  if (vwc) wcToTab.delete(vwc.id);
   try { win.contentView.removeChildView(view); } catch {}
-  saved.finally(() => { try { view.webContents.close(); } catch {} });
+  saved.finally(() => { try { if (vwc && !vwc.isDestroyed()) vwc.close(); } catch {} });
   if (rt.partition && rt.partition.startsWith('pouley-ephemere-')) {
     session.fromPartition(rt.partition).clearStorageData().catch(() => {});
   }
@@ -930,6 +932,21 @@ function wireContents(tabId, wc) {
     if (handleShortcut(input, true)) event.preventDefault();
   });
   if (extHost) extHost.watch(tabId, wc);
+  // Page qui se ferme d'elle-même (window.close(), par exemple le retour d'une
+  // connexion) : l'onglet se ferme comme dans Chrome, au lieu de garder une
+  // vue sans page qui faisait planter la mise à jour de l'interface.
+  wc.once('destroyed', () => {
+    // Fermeture du navigateur : toutes les pages disparaissent, les onglets restent.
+    if (closingApp || !win || win.isDestroyed()) return;
+    const r = runtime.get(tabId);
+    if (!r || !r.view || (r.view.webContents && r.view.webContents !== wc)) return; // fermeture normale (veille, fermeture)
+    wcToTab.delete(wc.id);
+    try { win.contentView.removeChildView(r.view); } catch {}
+    r.view = null;
+    r.loading = false;
+    sessionKeep.drop(tabId);
+    setImmediate(() => { if (findTab(tabId)) closeTab(tabId); });
+  });
   wc.on('render-process-gone', (_e, details) => {
     if (details.reason !== 'clean-exit') sendUi('toast', { text: 'L’onglet a planté — recharge-le pour réessayer.' });
   });
@@ -1064,11 +1081,24 @@ function showContextMenu(tabId, wc, params) {
 // ─────────────────────────────────────────────────────────────────────────────
 // Actions sur les onglets
 
+// Où arrive un nouvel onglet (Paramètres → Barre des onglets) : en premier
+// sous les épinglés (comme Arc), en dernier (comme Chrome), ou juste après
+// l'onglet ouvert.
+function newTabIndex(p, pinnedCount) {
+  const mode = S().newTabPosition;
+  if (mode === 'end') return p.tabs.length;
+  if (mode === 'next') {
+    const i = p.tabs.findIndex((t) => t.id === currentTabId);
+    return i >= 0 ? i + 1 : p.tabs.length;
+  }
+  return pinnedCount;
+}
+
 function openTab({ url, input, poulaillerId, background, ephemeral, index, groupId } = {}) {
   const p = store.state.poulaillers.find((x) => x.id === poulaillerId) || activePoulailler();
   const rec = makeTab(input != null ? resolveInput(input) : url, ephemeral ? { ephemeral: true, title: 'Onglet éphémère' } : {});
   const pinnedCount = p.tabs.filter((t) => t.pinned).length;
-  const at = typeof index === 'number' ? index : pinnedCount; // les nouveaux onglets arrivent en haut, sous les épinglés
+  const at = typeof index === 'number' ? index : newTabIndex(p, pinnedCount);
   p.tabs.splice(Math.max(pinnedCount, Math.min(at, p.tabs.length)), 0, rec);
   if (groupId && groupsOf(p).some((g) => g.id === groupId)) {
     rec.groupId = groupId;
@@ -1354,19 +1384,26 @@ function normRect(r) {
 // ─────────────────────────────────────────────────────────────────────────────
 // Diffusion de l'état vers l'interface
 
+// La page d'une vue, si elle existe encore.
+const viewContents = (r) => {
+  const wc = r && r.view && r.view.webContents;
+  return wc && !wc.isDestroyed() ? wc : null;
+};
+
 function snapshot() {
   const rt = {};
   for (const [id, r] of runtime) {
+    const wc = viewContents(r);
     rt[id] = {
       loading: r.loading,
       canGoBack: r.canGoBack,
       canGoForward: r.canGoForward,
       blocked: r.report ? r.report.blocked.length : 0,
       audible: r.audible,
-      muted: r.view ? r.view.webContents.isAudioMuted() : false,
+      muted: wc ? wc.isAudioMuted() : false,
       awake: !!r.view,
       https: r.report ? r.report.url.startsWith('https:') : null,
-      zoom: r.view ? r.view.webContents.getZoomFactor() : 1,
+      zoom: wc ? wc.getZoomFactor() : 1,
       floating: !!r.floating,
       badge: r.badge || 0,
       memMb: r.memMb || 0,
@@ -3120,6 +3157,7 @@ function createWindow() {
   win.webContents.on('will-navigate', (e) => e.preventDefault());
   for (const ev of ['maximize', 'unmaximize', 'enter-full-screen', 'leave-full-screen']) win.on(ev, scheduleBroadcast);
   win.on('close', () => {
+    closingApp = true;
     store.state.window = { ...win.getNormalBounds(), maximized: win.isMaximized() };
     store.flush();
   });
@@ -3186,6 +3224,7 @@ app.whenReady().then(() => {
 });
 
 app.on('before-quit', async (event) => {
+  closingApp = true;
   if (vault) vault.lock();
   if (!store || app.__cleared) return;
   event.preventDefault();

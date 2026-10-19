@@ -19,6 +19,7 @@ const DEFAULT_STATE = {
     searchEngine2: 'duckduckgo', // second choix quand Perplexity est le moteur par défaut
     sidebarPosition: 'left', // left | right | top
     sidebarAutoHide: false,
+    newTabPosition: 'start', // start (en premier, comme Arc) | end (en dernier, comme Chrome) | next (après l'onglet ouvert)
     sidebarWidth: 264,
     swipePoulaillers: false, // glisser = défiler les onglets (pas changer de poulailler)
     autoGroupTabs: true, // groupes d'œufs automatiques

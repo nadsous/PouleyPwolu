@@ -874,6 +874,8 @@
       case 'barre': return [
         { type: 'choice', set: 'sidebarPosition', name: 'position', label: 'Position', help: 'À gauche comme Arc, à droite, ou en haut comme un navigateur classique.',
           options: { left: opt('gauche', 'À gauche', 'Comme Arc'), right: opt('droite', 'À droite', 'Côté droit'), top: opt('haut', 'En haut', 'Onglets classiques') } },
+        { type: 'choice', set: 'newTabPosition', name: 'nouvel_onglet', label: 'Où ouvrir les nouveaux onglets', help: 'Barre à gauche ou à droite : en premier = en haut de la liste. Barre en haut : en premier = à gauche, en dernier = à droite.',
+          options: { start: opt('premier', 'En premier', 'Comme Arc'), end: opt('dernier', 'En dernier', 'Comme Chrome'), next: opt('apres', 'Après l’onglet ouvert', 'Juste à côté') } },
         { type: 'bool', set: 'sidebarAutoHide', name: 'masquer', label: 'Masquer la barre', help: 'Elle s’ouvre quand la souris touche le bord de la fenêtre et se referme quand tu en sors. Raccourci : Ctrl+S.' },
         { type: 'number', set: 'sidebarWidth', name: 'largeur', label: 'Largeur', help: 'Tu peux aussi glisser le bord de la barre.', min: 200, max: 440, unit: 'px' },
         { type: 'bool', set: 'favHoverPreview', name: 'apercu_favoris', label: 'Aperçu des favoris au survol', help: 'Passe la souris sur un favori (Google Agenda, Gmail…) : la page s’affiche dans une bulle, sans quitter ce que tu fais.' },
