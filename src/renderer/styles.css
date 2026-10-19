@@ -1708,3 +1708,42 @@ body.sidebar-collapsed:not(.peeking) .edge-hot::after {
 }
 body.side-right.sidebar-collapsed:not(.peeking) .edge-hot::after { left: auto; right: 2px; }
 body.sidebar-collapsed:not(.peeking) .edge-hot:hover::after { height: 96px; margin-top: -48px; background: var(--space); }
+
+/* ───────────── Toasts dans la barre latérale
+   Les pages sont des vues natives posées par-dessus l'interface : un toast
+   au-dessus de la page resterait caché derrière. On le pose donc dans la
+   colonne de la barre, juste au-dessus des boutons du bas. */
+body.side-left:not(.sidebar-collapsed) .toasts, body.side-right:not(.sidebar-collapsed) .toasts {
+  bottom: 62px; width: calc(var(--side-w) - 28px); align-items: stretch;
+}
+body.side-left:not(.sidebar-collapsed) .toasts { left: 16px; right: auto; }
+body.side-right:not(.sidebar-collapsed) .toasts { left: auto; right: 14px; }
+body.side-left:not(.sidebar-collapsed) .toast, body.side-right:not(.sidebar-collapsed) .toast { max-width: none; }
+
+/* ═════════════ Barre en haut : flèches de défilement et « + » toujours visibles ═════════════
+   Les onglets rétrécissent d'abord (voir sizeTopTabs) ; s'ils ne tiennent plus,
+   les flèches apparaissent et le « + » reste collé à droite. */
+.tabs-arrow { display: none; }
+body.side-top .lists.overflow .tabs-arrow {
+  display: grid; flex: none; position: sticky; z-index: 3; width: 26px; height: 28px; border-radius: 8px;
+  background: color-mix(in srgb, var(--base) 82%, transparent); backdrop-filter: blur(8px); -webkit-app-region: no-drag;
+}
+body.side-top .lists.overflow .tabs-arrow svg { width: 15px; height: 15px; }
+body.side-top .lists.overflow .tabs-arrow:disabled { pointer-events: none; }
+body.side-top .lists.overflow .tabs-arrow:disabled svg { opacity: 0.3; }
+body.side-top .tabs-arrow.prev { order: -1; left: 0; margin-right: 2px; box-shadow: 10px 0 12px -6px color-mix(in srgb, var(--base) 80%, transparent); }
+body.side-top .tabs-arrow.next { order: 8; right: 62px; margin-left: 2px; box-shadow: -10px 0 12px -6px color-mix(in srgb, var(--base) 80%, transparent); }
+body.side-top .lists .new-tab {
+  order: 9; position: sticky; right: 32px; z-index: 3; flex: none; width: 28px; justify-content: center;
+  background: color-mix(in srgb, var(--base) 82%, transparent); backdrop-filter: blur(8px);
+}
+body.side-top .lists .all-tabs { order: 10; right: 0; }
+/* Le bloc de droite (› + ⌄) est d'un seul tenant : aucun onglet ne se devine dessous. */
+body.side-top .lists.overflow { padding-right: 0; }
+body.side-top .lists.overflow .tabs-arrow.next, body.side-top .lists.overflow .new-tab, body.side-top .lists.overflow .all-tabs {
+  margin-left: 0; margin-right: 0; border-radius: 0; background: var(--base); backdrop-filter: none;
+}
+body.side-top .lists.overflow .tabs-arrow.next { right: 58px; border-radius: 8px 0 0 8px; }
+body.side-top .lists.overflow .new-tab { right: 30px; width: 28px; }
+body.side-top .lists.overflow .all-tabs { width: 30px; border-radius: 0 8px 8px 0; box-shadow: none; }
+body.side-top .lists.overflow .tabs-arrow.prev { background: var(--base); backdrop-filter: none; }

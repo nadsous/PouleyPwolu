@@ -19,6 +19,7 @@ const DEFAULT_STATE = {
     searchEngine2: 'duckduckgo', // second choix quand Perplexity est le moteur par défaut
     sidebarPosition: 'left', // left | right | top
     sidebarAutoHide: false,
+    defaultAsked: false, // PouleyPwolu a déjà proposé de devenir le navigateur par défaut
     newTabPosition: 'start', // start (en premier, comme Arc) | end (en dernier, comme Chrome) | next (après l'onglet ouvert)
     sidebarWidth: 264,
     swipePoulaillers: false, // glisser = défiler les onglets (pas changer de poulailler)

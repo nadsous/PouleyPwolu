@@ -8,7 +8,7 @@ const {
 } = require('electron');
 const path = require('path');
 const fs = require('fs');
-const { spawn } = require('child_process');
+const { spawn, execFile } = require('child_process');
 const os = require('os');
 
 const { Store, makePoulailler } = require('./store');
@@ -1418,6 +1418,7 @@ function snapshot() {
     focusSite: (() => { const f = currentTabId && findTab(currentTabId); return f && S().focusEnabled !== false ? focus.distractingSite(f.rec.url, S().focusSites) : null; })(),
     aiOpen,
     cometAvailable: cometAvailable(),
+    defaultBrowser,
     extensions: EXTENSIONS.map((e) => ({ key: e.key, setting: e.setting, name: e.name, version: e.version, description: e.description, icon: e.icon, status: e.status, available: e.available, ids: [...new Set([...extIds.values()].map((x) => x[e.key]).filter(Boolean))] })),
     nadspdfApp: !!NADSPDF_APP,
     split,
@@ -2706,6 +2707,8 @@ const commands = {
   },
   'aidetect.page': (tabId) => aidPage(tabId || currentTabId),
   'pen.toggle': () => penToggle(),
+  'browser.default': () => makeDefaultBrowser(),
+  'browser.defaultCheck': () => checkDefaultBrowser(),
   'aidetect.text': (text) => aiDetect.analyzeText(text),
   'focus.addSite': (input) => {
     const site = focus.cleanSite(input);
@@ -3156,6 +3159,8 @@ function createWindow() {
   });
   win.webContents.on('will-navigate', (e) => e.preventDefault());
   for (const ev of ['maximize', 'unmaximize', 'enter-full-screen', 'leave-full-screen']) win.on(ev, scheduleBroadcast);
+  // Revenir des Paramètres Windows : on regarde si PouleyPwolu a été choisi.
+  win.on('focus', () => { checkDefaultBrowser(); });
   win.on('close', () => {
     closingApp = true;
     store.state.window = { ...win.getNormalBounds(), maximized: win.isMaximized() };
@@ -3169,8 +3174,45 @@ function createWindow() {
 }
 
 function openFromArgv(argv) {
-  const url = argv.slice(1).find((a) => /^https?:\/\//i.test(a));
-  if (url && win) openTab({ url });
+  if (!win) return;
+  const args = argv.slice(1).filter((a) => a && !a.startsWith('-'));
+  const url = args.find((a) => /^https?:\/\//i.test(a));
+  if (url) return openTab({ url });
+  // Un fichier .html ouvert depuis l'Explorateur (PouleyPwolu par défaut).
+  const file = args.find((a) => /\.(x?html?|shtml|xht)$/i.test(a) && path.isAbsolute(a) && fs.existsSync(a));
+  if (file) openTab({ url: require('url').pathToFileURL(file).href });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Navigateur par défaut. L'installateur inscrit PouleyPwolu auprès de Windows
+// (build/installer.nsh) ; Windows ne laisse aucune application se mettre par
+// défaut toute seule, on ouvre donc la page des Paramètres où l'utilisateur
+// choisit. « default » : c'est nous, « available » : inscrit mais pas choisi,
+// « unregistered » : version de développement ou installation ancienne.
+let defaultBrowser = 'unregistered';
+const REG_HTTPS = String.raw`HKCU\Software\Microsoft\Windows\Shell\Associations\UrlAssociations\https`;
+const regValue = (key, name) => new Promise((resolve) => {
+  if (process.platform !== 'win32') return resolve(null);
+  execFile('reg', ['query', key, '/v', name], { windowsHide: true, timeout: 4000 }, (err, out) => {
+    const m = !err && new RegExp(String.raw`\s${name}\s+REG_\w+\s+(.*)`).exec(out);
+    resolve(m ? m[1].trim() : null);
+  });
+});
+async function checkDefaultBrowser() {
+  // Windows 11 récent range le choix dans UserChoiceLatest, les autres dans UserChoice.
+  const [latest, choice, registered] = await Promise.all([
+    regValue(REG_HTTPS + String.raw`\UserChoiceLatest\ProgId`, 'ProgId'),
+    regValue(REG_HTTPS + String.raw`\UserChoice`, 'ProgId'),
+    regValue(String.raw`HKCU\Software\RegisteredApplications`, 'PouleyPwolu'),
+  ]);
+  const next = (latest || choice) === 'PouleyPwoluURL' ? 'default' : registered ? 'available' : 'unregistered';
+  if (next !== defaultBrowser) { defaultBrowser = next; scheduleBroadcast(); }
+  return defaultBrowser;
+}
+function makeDefaultBrowser() {
+  // Windows 11 ouvre directement la fiche de PouleyPwolu, avec son bouton
+  // « Définir par défaut » ; Windows 10 ouvre la liste des applications.
+  shell.openExternal(defaultBrowser === 'unregistered' ? 'ms-settings:defaultapps' : 'ms-settings:defaultapps?registeredAppUser=PouleyPwolu');
 }
 
 app.on('second-instance', (_e, argv) => {
@@ -3212,6 +3254,7 @@ app.whenReady().then(() => {
     scheduleBroadcast();
     backfillIcons();
     setupUpdater();
+    checkDefaultBrowser();
     setTimeout(() => checkUpdates(false), 10000);
     // Extensions du Chrome Web Store : mises à jour une fois par jour.
     const extUpdates = () => { if (S().autoUpdate !== false && extHost.list().length) extHost.checkUpdates(); };

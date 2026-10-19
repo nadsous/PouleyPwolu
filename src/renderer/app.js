@@ -249,6 +249,15 @@
     scheduleLayout();
 
     if (!snap.state.onboarded && !onboardingShown) startOnboarding();
+    else if (snap.defaultBrowser === 'available' && !snap.state.settings.defaultAsked) proposeDefault();
+  }
+
+  // Une seule fois, après l'installation : proposer d'être le navigateur par
+  // défaut. Windows garde la main, on ouvre seulement la bonne page.
+  function proposeDefault() {
+    api.cmd('settings.set', { defaultAsked: true });
+    toast('Les liens de tes mails, de Discord et de tes fichiers s’ouvriront ici.',
+      { title: 'Navigateur par défaut ?', timeout: 15000, action: { label: 'Oui', run: () => api.cmd('browser.default') } });
   }
 
   function tabEl(rec, opts = {}) {
@@ -374,7 +383,7 @@
     pb.classList.toggle('on', pinActive);
     pb.title = pinned.length + ' page' + (pinned.length > 1 ? 's' : '') + ' épinglée' + (pinned.length > 1 ? 's' : '') + ' — cliquer pour la liste';
     const activePin = pinned.find((t) => t.id === snap.currentTabId);
-    pb.replaceChildren(icon('epingle', 'pb-ic'), activePin ? favicon(activePin, 'pb-fav') : null, h('span', { class: 'pb-count' }, String(pinned.length)));
+    pb.replaceChildren(...[icon('epingle', 'pb-ic'), activePin && favicon(activePin, 'pb-fav'), h('span', { class: 'pb-count' }, String(pinned.length))].filter(Boolean));
     const tabs = p.tabs.filter((t) => !t.pinned);
     flipRender($('#pinned'), () => $('#pinned').replaceChildren(...pinned.map((t) => tabEl(t, { pinned: true }))));
     const groups = new Map((p.groups || []).map((g) => [g.id, g]));
@@ -996,13 +1005,18 @@
         }[u.status] || u.status;
         return [
           { type: 'about' },
+          { type: 'info', name: 'navigateur_par_defaut', label: 'Navigateur par défaut',
+            value: snap.defaultBrowser === 'default' ? 'Oui' : 'Non',
+            help: snap.defaultBrowser === 'default' ? 'Les liens ouverts depuis tes autres applications arrivent dans PouleyPwolu.'
+              : 'Windows te laisse choisir toi-même : le bouton ouvre la bonne page des Paramètres, clique ensuite sur « Définir par défaut ».' },
+          snap.defaultBrowser === 'default' ? null : { type: 'actions', items: [{ label: 'Faire de PouleyPwolu mon navigateur par défaut', run: () => api.cmd('browser.default') }] },
           { type: 'info', name: 'version', label: 'Version', value: 'PouleyPwolu ' + snap.version, help: 'Moteur : Chromium ' + (v.chromium || '?') + ' (Electron ' + (v.electron || '?') + ').' },
           { type: 'bool', set: 'autoUpdate', name: 'mises_a_jour_auto', label: 'Mises à jour automatiques', help: 'Vérifie au démarrage puis toutes les 6 h sur la page GitHub de PouleyPwolu (aucun identifiant envoyé), télécharge en arrière-plan et installe au prochain redémarrage. C’est la seule connexion que PouleyPwolu fait de lui-même : garde-la active pour recevoir les correctifs de sécurité de Chromium.' },
           { type: 'info', name: 'etat', label: 'État', value: statusText, help: u.error ? u.error : '' },
           { type: 'actions', items: u.status === 'ready'
             ? [{ label: 'Redémarrer et installer ' + u.version, run: () => api.cmd('update.install') }]
             : [{ label: 'Vérifier maintenant', run: () => api.cmd('update.check') }] },
-        ];
+        ].filter(Boolean);
       }
       default: return [];
     }
@@ -2273,20 +2287,40 @@
     clearDrop();
   });
 
-  // Barre du haut : largeur commune des onglets = place libre / nombre d'onglets,
-  // entre 40 px (icône seule) et 200 px. Au-delà, la zone défile.
+  // Barre du haut : les onglets se partagent la place libre et rétrécissent au
+  // fur et à mesure (200 px au plus, 48 px au moins = l'icône seule). Quand ils
+  // ne tiennent plus, la rangée défile et des flèches apparaissent.
+  const TAB_MIN = 48;
+  const TAB_MAX = 200;
+  const shown = (el) => el.getClientRects().length > 0;
   function sizeTopTabs() {
     const lists = $('.lists');
-    if (!document.body.classList.contains('side-top')) { lists.style.removeProperty('--tab-w'); return; }
-    const tabs = [...lists.querySelectorAll('.tab')];
-    if (!tabs.length) return;
+    if (!document.body.classList.contains('side-top')) { lists.style.removeProperty('--tab-w'); lists.classList.remove('overflow'); return; }
+    const tabs = [...lists.querySelectorAll('#tabs > .tab, .egg-tabs > .tab')].filter(shown);
     let fixed = 0;
-    for (const el of lists.querySelectorAll('.egg-head, .new-tab, .divider, .tab-list.pinned .tab')) fixed += el.getBoundingClientRect().width + 4;
-    const free = lists.clientWidth - fixed - 8;
-    const n = tabs.filter((t) => !t.closest('.tab-list.pinned')).length || 1;
-    const w = Math.max(40, Math.min(200, Math.floor(free / n) - 2));
+    for (const el of lists.querySelectorAll('#btn-pinned, .egg-head, .new-tab, .all-tabs')) if (shown(el)) fixed += el.getBoundingClientRect().width + 4;
+    const gaps = lists.querySelectorAll('.egg-group').length * 8 + tabs.length * 2;
+    const free = lists.getBoundingClientRect().width - fixed - gaps - 12;
+    const ideal = Math.floor(free / (tabs.length || 1));
+    // L'onglet actif garde au moins 140 px : il prend sa part en plus.
+    const w = Math.max(TAB_MIN, Math.min(TAB_MAX, tabs.length > 1 && ideal < 140 ? Math.floor((free - 140) / (tabs.length - 1)) : ideal));
     lists.style.setProperty('--tab-w', w + 'px');
+    updateTabArrows();
   }
+  function updateTabArrows() {
+    const lists = $('.lists');
+    const over = document.body.classList.contains('side-top') && lists.scrollWidth > lists.clientWidth + 2;
+    lists.classList.toggle('overflow', over);
+    $('#tabs-prev').disabled = !over || lists.scrollLeft <= 1;
+    $('#tabs-next').disabled = !over || lists.scrollLeft + lists.clientWidth >= lists.scrollWidth - 1;
+  }
+  const scrollTabs = (dir) => {
+    const lists = $('.lists');
+    lists.scrollBy({ left: dir * Math.max(160, lists.clientWidth * 0.6), behavior: 'smooth' });
+  };
+  $('#tabs-prev').onclick = () => scrollTabs(-1);
+  $('#tabs-next').onclick = () => scrollTabs(1);
+  $('.lists').addEventListener('scroll', () => updateTabArrows(), { passive: true });
   new ResizeObserver(() => sizeTopTabs()).observe($('.lists'));
 
   // Barre du haut : la molette fait défiler les onglets horizontalement,
