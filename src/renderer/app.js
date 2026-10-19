@@ -2122,6 +2122,7 @@
     if (!inside && !resizing) peekState.leaveTimer = setTimeout(() => closePeek(), 260);
   });
   $('#edge-hot').addEventListener('mouseenter', openPeek);
+  $('#edge-hot').addEventListener('click', openPeek);
 
   function toggleSidebar() {
     const hide = !sidebarHidden();
@@ -2454,6 +2455,7 @@
       case 'find': return snap.currentTabId && openFind();
       case 'inspector': return toggleInspector();
       case 'aidetect': return openInspectorTab('ai');
+      case 'peek': return openPeek();
       case 'settings': return openSettings();
       case 'edit-poulailler': return openPoulaillerEditor(activeP());
       case 'shot-region': return startRegionShot();

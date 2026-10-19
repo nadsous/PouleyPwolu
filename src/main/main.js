@@ -2932,6 +2932,7 @@ const commands = {
   // web (vue native) ne transmet pas les sorties de souris à l'interface.
   'peek.watch': ({ on, width = 264, side = 'left' } = {}) => {
     clearInterval(peekTimer);
+    peekTimer = null;
     peekInside = null;
     if (!on || !win) return;
     peekTimer = setInterval(() => {
@@ -2992,6 +2993,28 @@ ipcMain.on('layout', (event, l) => {
   applyLayout();
 });
 // Premier chargement d'un onglet réveillé : rend son sessionStorage (même site, même espace).
+// ─────────────────────────────────────────────────────────────────────────────
+// Barre masquée : on surveille le bord de la fenêtre depuis ici. La bande de
+// 8 px de l'interface ne suffit pas : fenêtre agrandie, Windows la pousse de
+// quelques pixels hors de l'écran et il n'en reste presque rien ; avec un
+// écran à gauche, la souris passe sans s'arrêter. On prend donc le bord
+// visible (fenêtre ou écran) et une bande de 10 px.
+setInterval(() => {
+  if (!win || win.isDestroyed() || !store || peekTimer) return;
+  const s = S();
+  if (!s.sidebarAutoHide || s.sidebarPosition === 'top' || viewsHidden) return;
+  if (!win.isFocused() || win.isMinimized()) return;
+  const p = screen.getCursorScreenPoint();
+  const b = win.getContentBounds();
+  if (p.y < b.y || p.y > b.y + b.height) return;
+  const d = screen.getDisplayMatching(b).bounds;
+  const band = 10;
+  const hit = s.sidebarPosition === 'right'
+    ? p.x <= Math.min(b.x + b.width, d.x + d.width) && p.x >= Math.min(b.x + b.width, d.x + d.width) - band
+    : p.x >= Math.max(b.x, d.x) && p.x <= Math.max(b.x, d.x) + band;
+  if (hit) sendUi('shortcut', 'peek');
+}, 90);
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Stylo : le dessin vit dans la page (preload/page.js) ; ici on garde les
 // réglages du stylo et on fait la capture d'écran.
