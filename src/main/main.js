@@ -1301,7 +1301,18 @@ function ensureAiView() {
   aiView.setVisible(false);
   win.contentView.addChildView(aiView);
   const wc = aiView.webContents;
-  wc.setWindowOpenHandler(({ url }) => {
+  wc.setWindowOpenHandler(({ url, disposition }) => {
+    // « Continuer avec Google » : la popup doit rester dans la session du
+    // panneau et garder window.opener, sinon la connexion n'y revient jamais.
+    if (disposition === 'new-window' && /^https?:/.test(url)) {
+      return {
+        action: 'allow',
+        overrideBrowserWindowOptions: {
+          width: 520, height: 720, autoHideMenuBar: true, backgroundColor: '#111113', icon: ICON,
+          webPreferences: { partition, sandbox: true, contextIsolation: true, preload: PAGE_PRELOAD },
+        },
+      };
+    }
     if (/^https?:/.test(url)) openTab({ url });
     return { action: 'deny' };
   });
@@ -1321,11 +1332,68 @@ function ensureAiView() {
 }
 
 function setAiOpen(open) {
+  if (open) closeExtPanel();
   aiOpen = open;
   if (open) ensureAiView();
   applyLayout();
   scheduleBroadcast();
 }
+
+// Panneau latéral d'une extension (Claude, ChatGPT…), à la place du panneau IA.
+let extPanel = null; // { extId, url, view }
+function openExtPanel(extId, url, ses) {
+  if (extPanel && extPanel.extId === extId && extPanel.url === url) return;
+  closeExtPanel();
+  aiOpen = false;
+  const view = new WebContentsView({ webPreferences: { session: ses, sandbox: true, contextIsolation: true, spellcheck: false } });
+  view.setBorderRadius(12);
+  view.setVisible(false);
+  win.contentView.addChildView(view);
+  const wc = view.webContents;
+  wc.setWindowOpenHandler(({ url: u, disposition }) => {
+    // Connexion au compte : une vraie popup dans la même session.
+    if (disposition === 'new-window' && /^https?:/.test(u)) {
+      return { action: 'allow', overrideBrowserWindowOptions: { width: 520, height: 720, autoHideMenuBar: true, icon: ICON, webPreferences: { session: ses, sandbox: true, contextIsolation: true, preload: PAGE_PRELOAD } } };
+    }
+    if (/^(https?|chrome-extension):/.test(u)) openTab({ url: u });
+    return { action: 'deny' };
+  });
+  wc.on('before-input-event', (event, input) => { if (handleShortcut(input, true)) event.preventDefault(); });
+  wc.on('context-menu', (_e, params) => {
+    Menu.buildFromTemplate([
+      { label: 'Couper', role: 'cut' }, { label: 'Copier', role: 'copy' }, { label: 'Coller', role: 'paste' },
+      { type: 'separator' },
+      { label: 'Recharger', click: () => wc.reload() },
+      { label: 'Inspecter', click: () => wc.inspectElement(params.x, params.y) },
+    ]).popup({ window: win });
+  });
+  extPanel = { extId, url, view };
+  wc.loadURL(url).catch(() => {});
+  applyLayout();
+  scheduleBroadcast();
+}
+function closeExtPanel() {
+  if (!extPanel) return;
+  const { extId, view } = extPanel;
+  extPanel = null;
+  try { win.contentView.removeChildView(view); } catch {}
+  try { view.webContents.close(); } catch {}
+  if (extHost) extHost.emitTo(extId, 'sidePanel.onClosed', [{ windowId: 1 }]);
+  applyLayout();
+  scheduleBroadcast();
+}
+
+// Groupes vus par les extensions (chrome.tabGroups).
+const extGroups = {
+  ofTab: (tabId) => { const f = findTab(tabId); return f && f.poulailler && f.rec.groupId ? groupsOf(f.poulailler).find((g) => g.id === f.rec.groupId) || null : null; },
+  get: (id) => { for (const p of store.state.poulaillers) { const g = groupsOf(p).find((x) => x.id === id); if (g) return g; } return null; },
+  all: () => store.state.poulaillers.flatMap((p) => groupsOf(p)),
+  // Un groupe créé par une extension ne range pas d'autres sites tout seul.
+  create: (tabIds) => { const f = findTab(tabIds[0]); return createGroup(f && f.poulailler ? f.poulailler : activePoulailler(), tabIds, { name: 'Groupe', auto: false }); },
+  add: (groupId, tabIds) => { for (const id of tabIds) setTabGroup(id, groupId); },
+  remove: (tabIds) => { for (const id of tabIds) setTabGroup(id, null); },
+  update: (id, { name, color, collapsed }) => commands['group.update']({ id, name, color, collapsed }),
+};
 
 function aiAsk(prompt) {
   ensureAiView();
@@ -1368,9 +1436,14 @@ function applyLayout() {
     rt.view.setVisible(visible);
   }
   if (aiView) {
-    const visible = aiOpen && !viewsHidden && !!layout.ai && !htmlFullscreenTab;
+    const visible = aiOpen && !extPanel && !viewsHidden && !!layout.ai && !htmlFullscreenTab;
     if (visible) aiView.setBounds(layout.ai);
     aiView.setVisible(visible);
+  }
+  if (extPanel) {
+    const visible = !viewsHidden && !!layout.ai && !htmlFullscreenTab;
+    if (visible) extPanel.view.setBounds(layout.ai);
+    extPanel.view.setVisible(visible);
   }
 }
 
@@ -1408,6 +1481,8 @@ function snapshot() {
       badge: r.badge || 0,
       memMb: r.memMb || 0,
       pen: !!r.penOn,
+      // Extension IA qui pilote cet onglet (logo sur l'onglet).
+      agent: wc && extHost ? extHost.agentOf(wc.id) : null,
     };
   }
   return {
@@ -1417,6 +1492,7 @@ function snapshot() {
     // L'onglet affiché est-il un site qui distrait ? (compteur de productivité)
     focusSite: (() => { const f = currentTabId && findTab(currentTabId); return f && S().focusEnabled !== false ? focus.distractingSite(f.rec.url, S().focusSites) : null; })(),
     aiOpen,
+    sidePanel: extPanel ? extPanel.extId : null,
     cometAvailable: cometAvailable(),
     defaultBrowser,
     extensions: EXTENSIONS.map((e) => ({ key: e.key, setting: e.setting, name: e.name, version: e.version, description: e.description, icon: e.icon, status: e.status, available: e.available, ids: [...new Set([...extIds.values()].map((x) => x[e.key]).filter(Boolean))] })),
@@ -2744,7 +2820,9 @@ const commands = {
   },
   'views.hidden': (hidden) => { viewsHidden = !!hidden; applyLayout(); if (!hidden) { const wc = currentContents(); if (wc) wc.focus(); } },
 
-  'ai.toggle': () => setAiOpen(!aiOpen),
+  'ai.toggle': () => (extPanel ? closeExtPanel() : setAiOpen(!aiOpen)),
+  'ext.panelClose': () => closeExtPanel(),
+  'ext.agentStop': (tabId) => { const r = runtime.get(tabId); const wc = viewContents(r); if (wc) extHost.stopAgent(wc.id); },
   'ai.ask': (prompt) => aiAsk(String(prompt || '')),
   'ai.askPage': () => aiAskPage(),
   'ai.home': () => { ensureAiView(); aiView.webContents.loadURL(askUrl('')).catch(() => {}); },
@@ -3224,6 +3302,10 @@ app.on('second-instance', (_e, argv) => {
 
 app.whenReady().then(() => {
   Menu.setApplicationMenu(null);
+  // Les popups (connexion Google, paiement) ne prennent pas l'identité de leur
+  // session mais celle de l'application : sans ça elles s'annonçaient
+  // « PouleyPwolu … Electron », et claude.ai déconnectait juste après la connexion.
+  app.userAgentFallback = cleanUserAgent(app.userAgentFallback);
   store = new Store();
   // Rien n'est gardé si l'utilisateur veut tout effacer en fermant.
   sessionKeep = new SessionKeep(app.getPath('userData'), S().clearOnExit ? null : store.key);
@@ -3232,6 +3314,8 @@ app.whenReady().then(() => {
     state: () => store.state, save: () => store.save(), sendUi, broadcast: () => scheduleBroadcast(),
     win: () => win, currentTabId: () => currentTabId, currentSession,
     runtime, wcToTab, allSessions, openTab, activateTab, closeTab, ensureView,
+    groups: extGroups,
+    panel: { open: openExtPanel, close: closeExtPanel, current: () => (extPanel ? extPanel.extId : null), view: (id) => (extPanel && extPanel.extId === id ? extPanel.view.webContents : null) },
   });
   // Verrouiller le coffre quand l'ordinateur se verrouille ou se met en veille.
   powerMonitor.on('lock-screen', () => vaultLock('ecran'));
@@ -3302,6 +3386,11 @@ app.on('web-contents-created', (_e, contents) => {
     if (!details.isMainFrame || details.isSameDocument) return;
     const google = isGoogleLogin(details.url);
     if (google || contents.__googleDbg) googleIdentity(contents, google);
+  });
+  // Une popup ouverte directement sur Google : sa première navigation part
+  // avant qu'on l'écoute, on lui donne l'identité Chrome dès sa création.
+  contents.on('did-create-window', (child, { url }) => {
+    if (isGoogleLogin(url)) googleIdentity(child.webContents, true);
   });
   // Aucune vue ne doit pouvoir embarquer de <webview> ni naviguer vers des schémas exotiques.
   contents.on('will-attach-webview', (e) => e.preventDefault());

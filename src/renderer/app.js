@@ -205,10 +205,6 @@
     }
     lastBlocked = blocked;
 
-    const ai = AI_PROVIDERS[s.ai] || AI_PROVIDERS.claude;
-    $('#ai-label').textContent = ai.label;
-    if ($('#ai-logo').dataset.k !== s.ai) { $('#ai-logo').innerHTML = B.svg(s.ai); $('#ai-logo').dataset.k = s.ai; }
-    $('#btn-ai').classList.toggle('on', !!snap.aiOpen);
     $('#btn-inspector').classList.toggle('on', inspector.open);
     renderFocusTool();
 
@@ -237,10 +233,22 @@
     $('#empty-title').textContent = `${p.name} — poulailler vide`;
 
     // Panneau IA
-    $('#ai-panel').classList.toggle('hidden', !snap.aiOpen);
+    // Panneau d'une extension (Claude, ChatGPT…) au même endroit.
+    const panelExt = snap.sidePanel && (snap.userExtensions || []).find((e) => e.id === snap.sidePanel);
+    $('#ai-panel').classList.toggle('hidden', !snap.aiOpen && !snap.sidePanel);
+    $('#ai-panel').classList.toggle('ext-mode', !!snap.sidePanel);
     const sw = $('#ai-switch');
-    sw.replaceChildren(...Object.entries(AI_PROVIDERS).map(([k, v]) =>
-      h('button', { class: s.ai === k ? 'on' : '', title: `${v.label} (${v.by})`, onclick: () => api.cmd('settings.set', { ai: k }) }, logo(k), v.label)));
+    if (snap.sidePanel) {
+      const key = 'ext:' + snap.sidePanel;
+      if (sw.dataset.k !== key) {
+        sw.dataset.k = key;
+        sw.replaceChildren(h('span', { class: 'ext-panel-title' }, panelExt && panelExt.icon ? h('img', { src: panelExt.icon, alt: '' }) : icon('extension'), panelExt ? panelExt.name : 'Extension'));
+      }
+    } else {
+      sw.dataset.k = '';
+      sw.replaceChildren(...Object.entries(AI_PROVIDERS).map(([k, v]) =>
+        h('button', { class: s.ai === k ? 'on' : '', title: `${v.label} (${v.by})`, onclick: () => api.cmd('settings.set', { ai: k }) }, logo(k), v.label)));
+    }
 
     $('#inspector').classList.toggle('hidden', !inspector.open);
     if (overlay === 'settings') renderSettingsBody();
@@ -280,6 +288,15 @@
     const sp = snap.split;
     if (sp && (sp.a === rec.id || sp.b === rec.id) && splitActive()) el.append(icon('cote', 'eph floatmark'));
     el.append(h('span', { class: 'title' }, title));
+    // Un assistant IA (extension) pilote cet onglet : son logo, et un clic l'arrête.
+    const agent = rt.agent && (snap.userExtensions || []).find((e) => e.id === rt.agent);
+    if (agent) {
+      el.classList.add('piloted');
+      el.append(h('button', {
+        class: 'agent', title: `${agent.name} pilote cet onglet\nClic : reprendre la main`,
+        onclick: (e) => { e.stopPropagation(); api.cmd('ext.agentStop', rec.id); },
+      }, agent.icon ? h('img', { src: agent.icon, alt: '' }) : icon('ia')));
+    }
     if (rt.audible || rt.muted) {
       el.append(h('button', {
         class: 'audio', title: rt.muted ? 'Réactiver le son' : 'Couper le son',
@@ -372,7 +389,7 @@
 
   function renderTabs(p) {
     const sig = JSON.stringify([p.id, snap.currentTabId, p.groups || [], snap.split && splitActive(), (snap.userExtensions || []).length,
-      p.tabs.map((t) => { const r = rtOf(t.id); return [t.id, t.title, t.url, t.favicon, t.pinned, t.groupId, t.ephemeral, r.awake, r.loading, r.badge, r.audible, r.muted, r.floating]; })]);
+      p.tabs.map((t) => { const r = rtOf(t.id); return [t.id, t.title, t.url, t.favicon, t.pinned, t.groupId, t.ephemeral, r.awake, r.loading, r.badge, r.audible, r.muted, r.floating, r.agent]; })]);
     if (sig === tabsSig) return;
     tabsSig = sig;
     const pinned = p.tabs.filter((t) => t.pinned);
@@ -2472,7 +2489,6 @@
   $('#empty-search').onclick = () => openPalette('new');
   $('#shield').onclick = () => openInspectorTab('privacy');
   $('#btn-inspector').onclick = () => toggleInspector();
-  $('#btn-ai').onclick = () => api.cmd('ai.toggle');
   $('#btn-settings').onclick = () => openSettings();
   $('#btn-add-space').onclick = () => openPoulaillerEditor(null);
   $('#btn-archive').onclick = () => openArchive();

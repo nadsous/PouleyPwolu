@@ -6,7 +6,7 @@
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
-const { app, net, BrowserWindow, Notification, ipcMain, screen } = require('electron');
+const { app, net, BrowserWindow, Notification, ipcMain, screen, webContents } = require('electron');
 const crx = require('./crx');
 
 const COMPAT_PRELOAD = path.join(__dirname, '..', 'preload', 'ext-compat.js');
@@ -157,16 +157,17 @@ function createExtHost(d) {
     }
     ses.serviceWorkers.on('running-status-changed', ({ versionId }) => {
       const sw = ses.serviceWorkers.getWorkerFromVersionID(versionId);
-      if (!sw || sw._pouley) return;
-      const extId = extIdOf(sw.scope);
-      if (!extId) return;
-      sw._pouley = true;
-      const rec = { ses, sw, extId };
-      workers.add(rec);
-      try {
-        sw.ipc.handle('ext:api', (_e, method, args) => callApi({ ses, extId }, method, args));
-      } catch {}
+      if (sw) trackWorker(ses, sw);
     });
+  }
+
+  // Les service workers à qui envoyer les événements (onglets, débogueur…).
+  function trackWorker(ses, sw) {
+    const extId = extIdOf(sw.scope);
+    if (!extId) return;
+    for (const w of workers) if (w.ses === ses && w.sw.versionId === sw.versionId) return;
+    workers.add({ ses, sw, extId });
+    try { sw.ipc.handle('ext:api', (_e, method, args) => callApi({ ses, extId }, method, args)); } catch {}
   }
 
   async function loadInto(ses) {
@@ -189,6 +190,13 @@ function createExtHost(d) {
       map.delete(id);
     }
     for (const w of [...workers]) if (w.extId === id) workers.delete(w);
+    // Ce que l'extension avait ouvert : panneau, page cachée, minuteries, onglets pilotés.
+    if (d.panel.current() === id) d.panel.close();
+    const off = offscreens.get(id);
+    offscreens.delete(id);
+    if (off && !off.isDestroyed()) off.destroy();
+    for (const n of [...alarmsOf(id).keys()]) alarmClear(id, n);
+    for (const [wcId, owner] of [...dbgOwner]) if (owner === id) { dbgOwner.delete(wcId); const wc = wcOf(wcId); try { if (wc) wc.debugger.detach(); } catch {} }
   }
 
   // ── Onglets vus par les extensions (identifiant = celui de la page)
@@ -205,13 +213,31 @@ function createExtHost(d) {
   function tabInfo(tabId, wc, index = 0) {
     const active = tabId === d.currentTabId();
     const url = wc.getURL();
+    const g = d.groups.ofTab(tabId);
     return {
       id: wc.id, index, windowId: WINDOW_ID, openerTabId: undefined, active, highlighted: active, selected: active,
       pinned: false, audible: wc.isCurrentlyAudible(), discarded: false, autoDiscardable: true, incognito: false,
       mutedInfo: { muted: wc.isAudioMuted() }, url, pendingUrl: undefined, title: wc.getTitle() || url,
-      status: wc.isLoading() ? 'loading' : 'complete', groupId: -1, width: 0, height: 0,
+      status: wc.isLoading() ? 'loading' : 'complete', groupId: g ? groupNum(g.id) : -1, width: 0, height: 0,
+      favIconUrl: undefined,
     };
   }
+
+  // ── Groupes d'onglets : Chrome les numérote, PouleyPwolu leur donne un nom.
+  const groupNums = new Map(); // id PouleyPwolu -> numéro Chrome
+  const groupIds = new Map(); // numéro Chrome -> id PouleyPwolu
+  const groupNum = (id) => {
+    if (!groupNums.has(id)) { const n = groupNums.size + 1; groupNums.set(id, n); groupIds.set(n, id); }
+    return groupNums.get(id);
+  };
+  const CHROME_COLORS = { grey: '#8A8A8A', blue: '#1565D8', red: '#EF3E36', yellow: '#FFE100', green: '#3BB273', pink: '#FF5FA2', purple: '#A66CFF', cyan: '#2EC4B6', orange: '#FE7146' };
+  const chromeColor = (hex) => Object.keys(CHROME_COLORS).find((k) => CHROME_COLORS[k].toLowerCase() === String(hex).toLowerCase()) || 'grey';
+  const groupInfo = (g) => ({ id: groupNum(g.id), title: g.name, color: chromeColor(g.color), collapsed: !!g.collapsed, windowId: WINDOW_ID, shared: false });
+  const ourGroup = (num) => {
+    const g = d.groups.get(groupIds.get(num));
+    if (!g) throw new Error('No group with id: ' + num + '.');
+    return g;
+  };
   const tabIdOfWc = (wcId) => d.wcToTab.get(wcId);
   const wcOf = (tabWcId) => { const t = tabIdOfWc(tabWcId); const r = t && d.runtime.get(t); return r && r.view ? r.view.webContents : null; };
 
@@ -358,11 +384,248 @@ function createExtHost(d) {
         if (page) openAndGet(absUrl(extId, page), false);
         return undefined;
       }
+      // ── Onglets : ce dont les assistants ont besoin en plus
+      case 'tabs.goBack': case 'tabs.goForward': case 'tabs.reload': {
+        const [id] = typeof a0 === 'number' ? [a0] : [currentWcId()];
+        const wc = wcOf(id);
+        if (!wc) throw new Error('No tab with id: ' + id + '.');
+        if (method === 'tabs.reload') wc.reload();
+        else if (method === 'tabs.goBack') wc.navigationHistory.goBack();
+        else wc.navigationHistory.goForward();
+        return undefined;
+      }
+      case 'tabs.captureVisibleTab': {
+        const opts = (typeof a0 === 'object' && a0) || (typeof args[1] === 'object' && args[1]) || {};
+        const wc = wcOf(currentWcId());
+        if (!wc) throw new Error('Aucun onglet affiché.');
+        const img = await wc.capturePage();
+        return opts.format === 'png' ? img.toDataURL() : 'data:image/jpeg;base64,' + img.toJPEG(opts.quality || 90).toString('base64');
+      }
+      case 'tabs.getZoom': { const wc = wcOf(typeof a0 === 'number' ? a0 : currentWcId()); return wc ? wc.getZoomFactor() : 1; }
+      case 'tabs.setZoom': { const [id, z] = typeof a0 === 'number' ? [a0, args[1]] : [currentWcId(), a0]; const wc = wcOf(id); if (wc && z > 0) wc.setZoomFactor(z); return undefined; }
+      case 'tabs.move': case 'tabs.discard': return undefined;
+      case 'tabs.group': {
+        const o = a0 || {};
+        const tabIds = [].concat(o.tabIds || []).map(tabIdOfWc).filter(Boolean);
+        if (!tabIds.length) throw new Error('No tab with id: ' + o.tabIds + '.');
+        const g = o.groupId != null ? ourGroup(o.groupId) : d.groups.create(tabIds);
+        if (o.groupId != null) d.groups.add(g.id, tabIds);
+        emit(ses, o.groupId != null ? 'tabGroups.onUpdated' : 'tabGroups.onCreated', [groupInfo(g)]);
+        return groupNum(g.id);
+      }
+      case 'tabs.ungroup': {
+        d.groups.remove([].concat(a0 || []).map(tabIdOfWc).filter(Boolean));
+        return undefined;
+      }
+      case 'tabGroups.get': return groupInfo(ourGroup(a0));
+      case 'tabGroups.query': {
+        const q = a0 || {};
+        return d.groups.all().map(groupInfo).filter((g) => (q.title == null || g.title === q.title) && (q.color == null || g.color === q.color) && (q.collapsed == null || g.collapsed === q.collapsed));
+      }
+      case 'tabGroups.update': {
+        const g = ourGroup(a0);
+        const p = args[1] || {};
+        d.groups.update(g.id, { name: p.title, color: p.color && CHROME_COLORS[p.color], collapsed: p.collapsed });
+        const info = groupInfo(d.groups.get(g.id));
+        emit(ses, 'tabGroups.onUpdated', [info]);
+        return info;
+      }
+      case 'tabGroups.move': return groupInfo(ourGroup(a0));
+
+      // ── Pilotage des onglets (protocole des outils de développement)
+      case 'debugger.getTargets':
+        return tabsIn(ses).map((t) => ({ type: 'page', id: 'pouley-' + t.id, tabId: t.id, title: t.title, url: t.url, attached: dbgOwner.has(t.id), faviconUrl: undefined }));
+      case 'debugger.attach': {
+        const wc = dbgTarget(a0);
+        const owner = dbgOwner.get(wc.id);
+        if (owner) throw new Error('Another debugger is already attached to the tab with id: ' + wc.id + '.');
+        // La connexion Google se sert aussi du débogueur : l'extension prend le relais.
+        if (wc.debugger.isAttached()) wc.__googleDbg = false;
+        else wc.debugger.attach(typeof args[1] === 'string' ? args[1] : '1.3');
+        dbgOwner.set(wc.id, extId);
+        hookDebugger(wc);
+        d.broadcast();
+        return undefined;
+      }
+      case 'debugger.detach': {
+        const wc = dbgTarget(a0);
+        if (dbgOwner.get(wc.id) !== extId) throw new Error('Debugger is not attached to the tab with id: ' + wc.id + '.');
+        dbgOwner.delete(wc.id);
+        try { wc.debugger.detach(); } catch {}
+        d.broadcast();
+        return undefined;
+      }
+      case 'debugger.sendCommand': {
+        const wc = dbgTarget(a0);
+        if (dbgOwner.get(wc.id) !== extId) throw new Error('Debugger is not attached to the tab with id: ' + wc.id + '.');
+        return wc.debugger.sendCommand(args[1], args[2] || {}, a0.sessionId);
+      }
+
+      // ── Panneau latéral
+      case 'sidePanel.setOptions': {
+        const o = a0 || {};
+        const s = o.tabId != null ? tabPanelOpts(extId, o.tabId) : panelOpts(extId);
+        if (o.path) s.path = o.path;
+        if (o.enabled != null) s.enabled = !!o.enabled;
+        return undefined;
+      }
+      case 'sidePanel.getOptions': {
+        const o = a0 || {};
+        const s = { ...panelOpts(extId), ...(o.tabId != null ? tabPanelOpts(extId, o.tabId) : {}) };
+        return { path: s.path, enabled: s.enabled !== false };
+      }
+      case 'sidePanel.setPanelBehavior': panelOpts(extId).onAction = !!(a0 && a0.openPanelOnActionClick); return undefined;
+      case 'sidePanel.getPanelBehavior': return { openPanelOnActionClick: !!panelOpts(extId).onAction };
+      case 'sidePanel.open': openPanel(extId, ses, a0 && a0.tabId); return undefined;
+      case 'sidePanel.close': if (d.panel.current() === extId) d.panel.close(); return undefined;
+
+      // ── Page cachée
+      case 'offscreen.createDocument': {
+        if (offscreens.has(extId)) throw new Error('Only a single offscreen document may be created.');
+        const w = new BrowserWindow({ show: false, webPreferences: { session: ses, sandbox: true, contextIsolation: true, spellcheck: false } });
+        offscreens.set(extId, w);
+        w.on('closed', () => { if (offscreens.get(extId) === w) offscreens.delete(extId); });
+        await w.loadURL(absUrl(extId, (a0 || {}).url)).catch(() => {});
+        return undefined;
+      }
+      case 'offscreen.closeDocument': { const w = offscreens.get(extId); offscreens.delete(extId); if (w && !w.isDestroyed()) w.destroy(); return undefined; }
+      case 'offscreen.hasDocument': return offscreens.has(extId);
+
+      // ── Connexion au compte de l'extension
+      case 'identity.launchWebAuthFlow': return webAuthFlow(extId, ses, a0 || {});
+
+      case 'runtime.getContexts': {
+        const f = a0 || {};
+        const out = [];
+        const add = (contextType, wc, tabId = -1) => out.push({ contextType, contextId: 'pouley-' + wc.id, tabId, windowId: WINDOW_ID, frameId: 0, documentId: 'pouley-' + wc.id, documentUrl: wc.getURL(), documentOrigin: 'chrome-extension://' + extId, incognito: false });
+        const pv = d.panel.view(extId);
+        if (pv) add('SIDE_PANEL', pv);
+        const off = offscreens.get(extId);
+        if (off && !off.isDestroyed()) add('OFFSCREEN_DOCUMENT', off.webContents);
+        if (popup && !popup.isDestroyed() && extIdOf(popup.webContents.getURL()) === extId) add('POPUP', popup.webContents);
+        for (const t of tabsIn(ses)) if (t.url.startsWith('chrome-extension://' + extId + '/')) add('TAB', wcOf(t.id), t.id);
+        return out.filter((c) => (!f.contextTypes || f.contextTypes.includes(c.contextType)) && (!f.documentUrls || f.documentUrls.includes(c.documentUrl)) && (!f.tabIds || f.tabIds.includes(c.tabId)));
+      }
+
+      // ── Alarmes
+      case 'alarms.create': {
+        const [name, info] = typeof a0 === 'string' ? [a0, args[1] || {}] : ['', a0 || {}];
+        alarmClear(extId, name);
+        const period = info.periodInMinutes ? Math.max(0.5, info.periodInMinutes) * 60000 : 0;
+        const first = info.when ? Math.max(0, info.when - Date.now()) : info.delayInMinutes != null ? info.delayInMinutes * 60000 : period;
+        const alarm = { name, scheduledTime: Date.now() + first, periodInMinutes: info.periodInMinutes };
+        const ring = () => {
+          emitTo(extId, 'alarms.onAlarm', [{ ...alarm }]);
+          if (period) { alarm.scheduledTime = Date.now() + period; rec.timer = setTimeout(ring, period); } else alarmsOf(extId).delete(name);
+        };
+        const rec = { alarm, timer: setTimeout(ring, Math.min(first, 2 ** 31 - 1)) };
+        alarmsOf(extId).set(name, rec);
+        return undefined;
+      }
+      case 'alarms.get': { const r = alarmsOf(extId).get(typeof a0 === 'string' ? a0 : ''); return r ? { ...r.alarm } : undefined; }
+      case 'alarms.getAll': return [...alarmsOf(extId).values()].map((r) => ({ ...r.alarm }));
+      case 'alarms.clear': return alarmClear(extId, typeof a0 === 'string' ? a0 : '');
+      case 'alarms.clearAll': { for (const n of [...alarmsOf(extId).keys()]) alarmClear(extId, n); return true; }
+
+      case 'downloads.download': { ses.downloadURL((a0 || {}).url); return Date.now() % 100000; }
+      case 'runtime.externalReply': externalReply(a0, args[1]); return undefined;
+
       default:
         throw new Error('API non prise en charge dans PouleyPwolu : ' + method);
     }
   }
   const currentWcId = () => { const r = d.runtime.get(d.currentTabId()); return r && r.view ? r.view.webContents.id : -1; };
+
+  // ── Débogueur : un seul pilote par onglet, comme dans Chrome.
+  const dbgOwner = new Map(); // id de la page -> extension qui la pilote
+  function dbgTarget(target) {
+    const t = target || {};
+    const id = t.tabId != null ? t.tabId : t.targetId ? Number(String(t.targetId).replace(/^pouley-/, '')) : NaN;
+    const wc = wcOf(id);
+    if (!wc) throw new Error('No tab with given id ' + id + '.');
+    return wc;
+  }
+  function hookDebugger(wc) {
+    if (wc.__extDbgHooked) return;
+    wc.__extDbgHooked = true;
+    const id = wc.id;
+    wc.debugger.on('message', (_e, method, params, sessionId) => {
+      const owner = dbgOwner.get(id);
+      if (owner) emitTo(owner, 'debugger.onEvent', [sessionId ? { tabId: id, sessionId } : { tabId: id }, method, params]);
+    });
+    const lost = (reason) => {
+      const owner = dbgOwner.get(id);
+      if (!owner) return;
+      dbgOwner.delete(id);
+      emitTo(owner, 'debugger.onDetach', [{ tabId: id }, reason]);
+      d.broadcast();
+    };
+    wc.debugger.on('detach', (_e, reason) => lost(reason === 'target closed' ? 'target_closed' : 'canceled_by_user'));
+    wc.once('destroyed', () => lost('target_closed'));
+  }
+  // L'extension qui pilote cet onglet (logo affiché sur l'onglet).
+  const agentOf = (wcId) => dbgOwner.get(wcId) || null;
+  function stopAgent(wcId) {
+    const wc = wcOf(wcId);
+    const owner = dbgOwner.get(wcId);
+    if (!wc || !owner) return;
+    // Comme le bouton « Annuler » de Chrome : l'extension apprend que c'est toi.
+    dbgOwner.delete(wcId);
+    emitTo(owner, 'debugger.onDetach', [{ tabId: wcId }, 'canceled_by_user']);
+    try { wc.debugger.detach(); } catch {}
+    d.broadcast();
+  }
+
+  // ── Panneau latéral
+  const panels = new Map(); // extId -> { path, enabled, onAction }
+  function panelOpts(extId) {
+    if (!panels.has(extId)) {
+      const m = manifestOf(extId) || {};
+      panels.set(extId, { path: m.side_panel && m.side_panel.default_path, enabled: true, onAction: false });
+    }
+    return panels.get(extId);
+  }
+  // Réglages propres à un onglet (Claude ouvre un panneau par onglet piloté).
+  const tabPanels = new Map(); // `${extId}|${tabId}` -> { path, enabled }
+  const tabPanelOpts = (extId, tabId) => {
+    const k = extId + '|' + tabId;
+    if (!tabPanels.has(k)) tabPanels.set(k, {});
+    return tabPanels.get(k);
+  };
+  function openPanel(extId, ses, tabId) {
+    const s = { ...panelOpts(extId), ...(tabId != null ? tabPanelOpts(extId, tabId) : {}) };
+    if (!s.path || s.enabled === false) throw new Error('No active side panel for this extension.');
+    d.panel.open(extId, absUrl(extId, s.path), ses || d.currentSession());
+    emitTo(extId, 'sidePanel.onOpened', [{ path: s.path, windowId: WINDOW_ID, tabId }]);
+  }
+
+  // ── Pages cachées, alarmes
+  const offscreens = new Map(); // extId -> BrowserWindow invisible
+  const alarms = new Map(); // extId -> Map(nom -> { alarm, timer })
+  const alarmsOf = (extId) => { if (!alarms.has(extId)) alarms.set(extId, new Map()); return alarms.get(extId); };
+  function alarmClear(extId, name) {
+    const r = alarmsOf(extId).get(name);
+    if (!r) return false;
+    clearTimeout(r.timer);
+    alarmsOf(extId).delete(name);
+    return true;
+  }
+
+  // ── Connexion : une fenêtre s'ouvre et se ferme quand le site revient vers l'extension.
+  function webAuthFlow(extId, ses, { url, interactive }) {
+    return new Promise((resolve, reject) => {
+      const back = `https://${extId}.chromiumapp.org/`;
+      const w = new BrowserWindow({ show: !!interactive, width: 520, height: 720, autoHideMenuBar: true, webPreferences: { session: ses, sandbox: true, contextIsolation: true } });
+      let done = false;
+      const finish = (err, res) => { if (done) return; done = true; if (!w.isDestroyed()) w.destroy(); err ? reject(err) : resolve(res); };
+      const check = (e, target) => { if (String(target).startsWith(back)) { e.preventDefault(); finish(null, target); } };
+      w.webContents.on('will-redirect', check);
+      w.webContents.on('will-navigate', check);
+      w.on('closed', () => finish(new Error('The user did not approve access.')));
+      w.loadURL(url).catch(() => {});
+      if (!interactive) setTimeout(() => finish(new Error('User interaction required.')), 10000);
+    });
+  }
 
   // Pages de l'extension (fenêtre du bouton, réglages…)
   ipcMain.handle('ext:api', (event, method, args) => {
@@ -371,18 +634,56 @@ function createExtHost(d) {
     return callApi({ ses: event.sender.session, extId }, method, args);
   });
 
+  // ── Sites autorisés à écrire à une extension (externally_connectable)
+  function connectableIds(ses, url) {
+    if (!/^https:/.test(url || '')) return [];
+    const map = loaded.get(ses);
+    if (!map) return [];
+    return [...map.keys()].filter((id) => {
+      const m = manifestOf(id);
+      const ec = m && m.externally_connectable;
+      return ec && (ec.matches || []).some((p) => matchPattern(p, url));
+    });
+  }
+  ipcMain.on('page:ext-connectable', (event) => {
+    try { event.returnValue = connectableIds(event.sender.session, event.senderFrame && event.senderFrame.url); } catch { event.returnValue = []; }
+  });
+  const replies = new Map(); // n° de réponse -> resolve
+  let replySeq = 0;
+  ipcMain.handle('page:ext-message', (event, id, message) => {
+    const url = event.senderFrame && event.senderFrame.url;
+    if (!connectableIds(event.sender.session, url).includes(id)) throw new Error('Could not establish connection. Receiving end does not exist.');
+    const tabId = tabIdOfWc(event.sender.id);
+    const sender = { url, origin: new URL(url).origin, frameId: 0, tab: tabId ? tabInfo(tabId, event.sender) : undefined };
+    return new Promise((resolve) => {
+      const n = ++replySeq;
+      replies.set(n, resolve);
+      setTimeout(() => { if (replies.delete(n)) resolve(undefined); }, 5 * 60000);
+      emitTo(id, 'runtime.onMessageExternal', [message, sender, n]);
+    });
+  });
+  function externalReply(n, value) {
+    const resolve = replies.get(n);
+    if (!resolve) return;
+    replies.delete(n);
+    resolve(value);
+  }
+
   // ── Événements envoyés aux extensions
-  function emit(ses, name, args) {
+  // Aux extensions d'une session (ses) ou à une seule extension (extId) :
+  // service worker et toutes ses pages (fenêtre du bouton, panneau, page cachée, onglets).
+  function emit(ses, name, args, extId = null) {
     for (const w of workers) {
-      if (ses && w.ses !== ses) continue;
+      if ((ses && w.ses !== ses) || (extId && w.extId !== extId)) continue;
       try { if (!w.sw.isDestroyed || !w.sw.isDestroyed()) w.sw.send('ext:event', name, args); } catch { workers.delete(w); }
     }
-    if (popup && !popup.isDestroyed()) popup.webContents.send('ext:event', name, args);
-    for (const r of d.runtime.values()) {
-      const wc = r.view && r.view.webContents;
-      if (wc && !wc.isDestroyed() && wc.getURL().startsWith('chrome-extension://')) wc.send('ext:event', name, args);
+    const prefix = extId ? `chrome-extension://${extId}/` : 'chrome-extension://';
+    for (const wc of webContents.getAllWebContents()) {
+      if (wc.isDestroyed() || (ses && wc.session !== ses) || !wc.getURL().startsWith(prefix)) continue;
+      try { wc.send('ext:event', name, args); } catch {}
     }
   }
+  const emitTo = (extId, name, args) => emit(null, name, args, extId);
   const hasExtensions = () => list().some((x) => x.enabled !== false);
 
   // Appelé par main.js quand une page d'onglet est créée.
@@ -429,9 +730,14 @@ function createExtHost(d) {
     const m = manifestOf(extId);
     const page = m && ((m.action && m.action.default_popup) || (m.browser_action && m.browser_action.default_popup));
     if (!page) {
+      // Panneau latéral (Claude, ChatGPT) : le bouton l'ouvre ou le ferme.
+      if (d.panel.current() === extId) { d.panel.close(); return undefined; }
+      if (panelOpts(extId).onAction) {
+        try { openPanel(extId, d.currentSession(), currentWcId()); return undefined; } catch {}
+      }
       // Pas de fenêtre : l'extension réagit au clic sur son bouton.
       const r = d.runtime.get(d.currentTabId());
-      if (r && r.view) emit(r.view.webContents.session, 'action.onClicked', [tabInfo(d.currentTabId(), r.view.webContents)]);
+      if (r && r.view) emit(r.view.webContents.session, 'action.onClicked', [tabInfo(d.currentTabId(), r.view.webContents)], extId);
       return undefined;
     }
     const ses = d.currentSession();
@@ -526,11 +832,11 @@ function createExtHost(d) {
     return list().map((e) => {
       const m = manifestOf(e.id);
       const info = m ? describe(e.id, dirOf(e.id), m) : { name: e.name, permissions: [] };
-      return { ...e, name: info.name || e.name, description: info.description, icon: info.icon, popup: info.popup, options: info.options, permissions: info.permissions, badge: badges.get(e.id) || null, available: !!m };
+      return { ...e, name: info.name || e.name, description: info.description, icon: info.icon, popup: info.popup, options: info.options, permissions: info.permissions, badge: badges.get(e.id) || null, available: !!m, panel: !!(m && m.side_panel) };
     });
   }
 
-  return { registerSession, loadInto, prepare, install, cancel, remove, setEnabled, setPinned, showPopup, watch, tabActivated, contextItems, checkUpdates, snapshot, callApi, extIdOf, list };
+  return { registerSession, loadInto, prepare, install, cancel, remove, setEnabled, setPinned, showPopup, watch, tabActivated, contextItems, checkUpdates, snapshot, callApi, extIdOf, list, agentOf, stopAgent, emitTo };
 }
 
 module.exports = { createExtHost };

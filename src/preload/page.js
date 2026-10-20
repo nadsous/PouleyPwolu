@@ -166,6 +166,37 @@ if (location.hostname === 'accounts.google.com') {
   try { contextBridge.executeInMainWorld({ func: chromeObjects }); } catch {}
 }
 
+// Sites reliés à une extension installée (claude.ai pour l'extension Claude,
+// chatgpt.com pour ChatGPT) : comme dans Chrome, ils peuvent lui écrire
+// directement, par exemple pour lui rendre la connexion au compte.
+try {
+  const ids = location.protocol === 'https:' ? ipcRenderer.sendSync('page:ext-connectable', location.href) : null;
+  if (ids && ids.length) {
+    contextBridge.exposeInMainWorld('__pouleyExtSend', (id, msg) => ipcRenderer.invoke('page:ext-message', id, msg));
+    contextBridge.executeInMainWorld({
+      args: [ids],
+      func: (ids) => {
+        const send = window.__pouleyExtSend;
+        const c = window.chrome || (window.chrome = {});
+        const rt = c.runtime || (c.runtime = {});
+        rt.sendMessage = (...args) => {
+          const callback = typeof args[args.length - 1] === 'function' ? args.pop() : null;
+          // Depuis une page, Chrome exige l'identifiant de l'extension ; une
+          // extension absente répond « introuvable » et la page essaie la suivante.
+          const [id, msg] = args;
+          const p = ids.includes(id) ? send(id, msg) : Promise.reject(new Error('Could not establish connection. Receiving end does not exist.'));
+          if (!callback) return p;
+          p.then((r) => callback(r), (err) => {
+            rt.lastError = { message: (err && err.message) || 'Could not establish connection. Receiving end does not exist.' };
+            try { callback(); } finally { rt.lastError = undefined; }
+          });
+          return undefined;
+        };
+      },
+    });
+  }
+} catch {}
+
 try {
   contextBridge.executeInMainWorld({ func: probes, args: [token] });
 } catch {
