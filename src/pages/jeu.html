@@ -29,6 +29,9 @@
     .keys { font-size: 13px; color: var(--muted); line-height: 1.8; }
     kbd { font: 12px 'JetBrains Mono', monospace; padding: 2px 6px; border-radius: 6px; background: #26262a; border: 1px solid rgba(255, 255, 255, 0.12); color: var(--bright); }
     .score { font: 600 42px 'JetBrains Mono', monospace; color: var(--yellow); margin: 4px 0; }
+    .theme-pick { margin-top: 14px; font-size: 13px; color: var(--muted); }
+    .theme-pick .btn { height: 28px; padding: 0 10px; font-size: 12px; margin-left: 6px; }
+    .theme-pick select { margin-left: 6px; font: inherit; color: var(--bright); background: #26262a; border: 1px solid rgba(255, 255, 255, 0.14); border-radius: 8px; padding: 4px 8px; }
   </style>
 </head>
 <body>
@@ -38,6 +41,8 @@
     <span class="pill">Record <b id="best">0</b></span>
     <span class="pill">Sprint <span class="dash"><i id="dash"></i></span></span>
     <span class="grow"></span>
+    <span class="pill" id="theme-pill" style="display:none"></span>
+    <span class="pill" id="fx" style="display:none"></span>
     <span class="pill" id="foxes">🦊 ×1</span>
   </div>
   <div class="offline" id="offline">
@@ -50,11 +55,13 @@
       <div class="sprites"><div id="s-poule" class="flip"></div><div id="s-renard"></div></div>
       <h1>Pouley contre le Renard</h1>
       <p>Picore le maïs 🌽, ramasse les œufs d’or 🥚 (ils font fuir les renards) et surtout : ne te fais pas attraper !</p>
+      <p class="keys">🪶 plume : tu cours plus vite · 🍗 tender : les renards ralentissent<br />🛡️ bouclier : un renard qui te mord y passe · 🕳️ terrier : cache-toi 3 s</p>
       <div class="keys">
         <kbd>↑</kbd><kbd>↓</kbd><kbd>←</kbd><kbd>→</kbd> ou <kbd>Z</kbd><kbd>Q</kbd><kbd>S</kbd><kbd>D</kbd> / <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> pour courir — ou maintiens la souris<br />
         <kbd>Espace</kbd> sprint · <kbd>P</kbd> pause
       </div>
       <p style="margin-top:18px"><button class="btn primary" id="play">Jouer (Entrée)</button></p>
+      <div class="theme-pick">Décor <select id="theme"></select> <button class="btn" id="theme-toggle" style="display:none"></button></div>
     </div>
   </div>
   <div class="screen hidden" id="over">
@@ -84,32 +91,299 @@
       S.drawToCanvas(c.getContext('2d'), rows, 0, 0, scale, flip);
       return c;
     }
+    const EMOJI_FONT = '"Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", sans-serif';
+    function bakeEmoji(ch, size) {
+      const c = document.createElement('canvas');
+      c.width = c.height = Math.ceil(size * 1.35);
+      const g = c.getContext('2d');
+      g.font = `${size}px ${EMOJI_FONT}`;
+      g.textAlign = 'center'; g.textBaseline = 'middle';
+      g.fillText(ch, c.width / 2, c.height / 2 + size * 0.06);
+      return c;
+    }
+    // Datte du Ramadan, dessinée à la main (pas d'emoji).
+    function bakeDate() {
+      const c = document.createElement('canvas');
+      c.width = 24; c.height = 16;
+      const g = c.getContext('2d');
+      g.fillStyle = '#5a2e12'; g.beginPath(); g.ellipse(12, 8, 10, 6, -0.2, 0, Math.PI * 2); g.fill();
+      g.fillStyle = '#8a4a20'; g.beginPath(); g.ellipse(9, 6, 4, 2, -0.2, 0, Math.PI * 2); g.fill();
+      return c;
+    }
     const SPR = {
       poule: [S.POULE_RUN.map((f) => bake(f, PX, false)), S.POULE_RUN.map((f) => bake(f, PX, true))],
       renard: [S.RENARD.map((f) => bake(f, PX, false)), S.RENARD.map((f) => bake(f, PX, true))],
       mais: bake(S.MAIS, PX, false),
       oeuf: bake(S.OEUF, PX, false),
+      plume: bake(S.PLUME, PX, false),
+      tender: bake(S.TENDER, PX, false),
+      shield: bakeEmoji('🛡️', 26),
     };
     document.getElementById('s-poule').innerHTML = S.toSvg(S.POULE);
     document.getElementById('s-renard').innerHTML = S.toSvg(S.RENARD[0]);
     document.getElementById('o-renard').innerHTML = S.toSvg(S.RENARD[1]);
 
-    // Herbe de fond pré-rendue
+    // ── Décors de saison ─────────────────────────────────────────────────────
+    // Seuls le décor et les objets changent : les règles restent les mêmes.
+    // grass : fond, brins clairs, brins foncés · flowers : petites taches ·
+    // bush : buisson (foncé, clair, baie) · obstacle : forme des buissons ·
+    // item / egg : remplacent le maïs / l'œuf d'or · fall : ce qui tombe du ciel.
+    const ZODIAC = ['du Rat', 'du Bœuf', 'du Tigre', 'du Lapin', 'du Dragon', 'du Serpent', 'du Cheval', 'de la Chèvre', 'du Singe', 'du Coq', 'du Chien', 'du Cochon'];
+    const THEMES = {
+      normal: { name: 'Normal', icon: '🌿', grass: ['#2f9a5e', '#3bb273', '#23864f'], flowers: ['#ffe100', '#ffffff', '#ef3e36'], bush: ['#1d6b3d', '#26874d', '#ef3e36'] },
+      halloween: { name: 'Halloween', icon: '🎃', banner: 'Joyeux Halloween !', grass: ['#2a2238', '#3a2f4d', '#1d1828'], flowers: ['#ff7b1c', '#8a5cf6', '#c4f04a'], obstacle: 'pumpkin', item: '🍬', fall: 'bats', moon: 'full', hat: 'witch' },
+      armistice: { name: '11 Novembre', icon: '🌺', banner: '11 novembre · on se souvient', grass: ['#557f45', '#679552', '#466f38'], flowers: ['#d7262e', '#2b5fd9', '#d7262e'], flowerMul: 4, bush: ['#3f6b36', '#4f8043', '#d7262e'], fall: 'poppies' },
+      noel: { name: 'Noël', icon: '🎄', banner: 'Joyeux Noël !', grass: ['#e6eef5', '#ffffff', '#d0dbe6'], flowers: ['#ef3e36', '#3bb273', '#ffe100'], obstacle: 'sapin', item: '🎁', fall: 'snow', hat: 'santa' },
+      neige: { name: 'Neige', icon: '❄️', banner: 'Il neige ! Attention, ça glisse', grass: ['#e3ebf3', '#f7fafd', '#cdd8e4'], flowers: ['#9fb7cc', '#ffffff', '#b9c9d8'], bush: ['#b9c9d8', '#eef3f8', '#7fb4e6'], fall: 'snow', hat: 'beanie', slip: true },
+      cny: { name: 'Nouvel an chinois', icon: '🧧', grass: ['#8f1d1d', '#a52a2a', '#7a1616'], flowers: ['#ffd34d', '#ffb000', '#ffffff'], obstacle: 'lantern', item: '🥟', egg: '🧧', fall: 'confetti', confetti: ['#ffd34d', '#ffb000', '#ffffff'] },
+      ramadan: { name: 'Ramadan', icon: '🌙', banner: 'Ramadan Mubarak', grass: ['#14243f', '#1b3052', '#0f1c33'], flowers: ['#ffd77a', '#ffffff', '#ffd77a'], bush: ['#1f4a4a', '#2b6060', '#ffd77a'], item: 'date', fall: 'lanterns', moon: 'crescent' },
+      aid: { name: 'Aïd', icon: '🎉', banner: 'Aïd Mubarak !', grass: ['#2f8a6e', '#3aa082', '#257259'], flowers: ['#ffd34d', '#ffffff', '#ff9ec7'], bush: ['#1e6b55', '#28866b', '#ffd34d'], item: '🧁', fall: 'confetti', confetti: ['#ffd34d', '#ffffff', '#ff9ec7', '#7fe3d0'], garland: true },
+      manga: { name: 'Manga', icon: '🌸', banner: 'Saison des cerisiers', grass: ['#7cc47f', '#8fd493', '#69b06c'], flowers: ['#ffb7d5', '#ffffff', '#ff8fbf'], bush: ['#e58fb3', '#f7b6d0', '#ffffff'], item: '🍙', fall: 'petals', hat: 'headband', manga: true },
+      rentree: { name: 'Rentrée', icon: '🎒', banner: 'Bonne rentrée !', grass: ['#cdb98f', '#d9c7a0', '#bca77d'], flowers: ['#ffffff', '#ffffff', '#ffffff'], flowerMul: 0.3, obstacle: 'cartable', item: '🍎', fall: 'leaves', marelle: true },
+    };
+
+    // Lit une date dans un autre calendrier (musulman, chinois) : les fêtes
+    // lunaires bougent chaque année, le navigateur sait les calculer.
+    function calParts(cal, d) {
+      const o = {};
+      try {
+        for (const p of new Intl.DateTimeFormat('en-u-ca-' + cal, { year: 'numeric', month: 'numeric', day: 'numeric' }).formatToParts(d)) o[p.type] = p.value;
+      } catch {}
+      return o;
+    }
+    function autoTheme(d = new Date()) {
+      const h = calParts('islamic-umalqura', d), hm = +h.month, hd = +h.day;
+      if ((hm === 10 && hd <= 3) || (hm === 12 && hd >= 10 && hd <= 13)) return 'aid';
+      if (hm === 9) return 'ramadan';
+      const c = calParts('chinese', d);
+      if (c.month === '1' && +c.day <= 15) return 'cny';
+      const md = (d.getMonth() + 1) * 100 + d.getDate();
+      if (md >= 1201) return 'noel';
+      if (md >= 1020 && md <= 1102) return 'halloween';
+      if (md >= 1109 && md <= 1112) return 'armistice';
+      if (md <= 229) return 'neige';
+      if (md >= 320 && md <= 420) return 'manga';
+      if (md >= 825 && md <= 915) return 'rentree';
+      return 'normal';
+    }
+
+    let T = THEMES.normal;
+    let fall = [];
+    const picker = document.getElementById('theme');
+    const forced = new URLSearchParams(location.search).get('theme');
+    // Le choix manuel ne vaut que pour la période en cours : passé Halloween,
+    // le décor redevient automatique et Noël s'affichera tout seul.
+    function savedPick() {
+      try {
+        const v = JSON.parse(localStorage.getItem('pouley-theme') || 'null');
+        if (v && v.period === autoTheme() && THEMES[v.pick]) return v.pick;
+      } catch {}
+      return 'auto';
+    }
+    function savePick(pick) {
+      if (pick === 'auto') localStorage.removeItem('pouley-theme');
+      else localStorage.setItem('pouley-theme', JSON.stringify({ pick, period: autoTheme() }));
+      applyTheme();
+    }
+    function applyTheme() {
+      const pick = THEMES[forced] ? forced : savedPick();
+      const auto = autoTheme();
+      const key = pick === 'auto' ? auto : pick;
+      T = THEMES[key];
+      if (key === 'cny') {
+        const y = +calParts('chinese', new Date()).relatedYear || new Date().getFullYear();
+        T.banner = `Bonne année ${ZODIAC[(((y - 4) % 12) + 12) % 12]} !`;
+      }
+      SPR.item = T.item === 'date' ? bakeDate() : T.item ? bakeEmoji(T.item, 22) : SPR.mais;
+      SPR.egg = T.egg ? bakeEmoji(T.egg, 26) : SPR.oeuf;
+      const pill = document.getElementById('theme-pill');
+      pill.textContent = T.banner ? `${T.icon} ${T.banner}` : '';
+      pill.style.display = T.banner ? '' : 'none';
+      document.documentElement.style.background = document.body.style.background = T.grass[2];
+      picker.innerHTML = `<option value="auto">Automatique (${THEMES[auto].name})</option>` +
+        Object.entries(THEMES).map(([k, t]) => `<option value="${k}">${t.icon} ${t.name}</option>`).join('');
+      picker.value = THEMES[pick] ? pick : 'auto';
+      // Pendant une fête : un bouton pour revenir au décor normal, et inversement.
+      const toggle = document.getElementById('theme-toggle');
+      toggle.style.display = auto === 'normal' ? 'none' : '';
+      toggle.textContent = key === 'normal' ? `${THEMES[auto].icon} Remettre ${THEMES[auto].name}` : '🌿 Décor normal';
+      toggle.dataset.to = key === 'normal' ? 'auto' : 'normal';
+      fall = [];
+      if (W) buildField();
+    }
+    picker.addEventListener('change', () => { savePick(picker.value); picker.blur(); });
+    document.getElementById('theme-toggle').addEventListener('click', (e) => { savePick(e.currentTarget.dataset.to); e.currentTarget.blur(); });
+
+    // Terrain pré-rendu : on le dessine une fois, puis on le recopie à chaque image.
     let field = null;
     function buildField() {
       field = document.createElement('canvas');
       field.width = W; field.height = H;
       const g = field.getContext('2d');
-      g.fillStyle = '#2f9a5e'; g.fillRect(0, 0, W, H);
+      const [base, light, dark] = T.grass;
+      g.fillStyle = base; g.fillRect(0, 0, W, H);
       for (let i = 0; i < (W * H) / 700; i++) {
         const x = Math.random() * W, y = Math.random() * H;
-        g.fillStyle = Math.random() < 0.5 ? '#3bb273' : '#23864f';
+        g.fillStyle = Math.random() < 0.5 ? light : dark;
         g.fillRect(Math.round(x / 3) * 3, Math.round(y / 3) * 3, 3, 6);
       }
-      for (let i = 0; i < (W * H) / 30000; i++) {
+      for (let i = 0; i < ((W * H) / 30000) * (T.flowerMul || 1); i++) {
         const x = Math.random() * W, y = Math.random() * H;
-        g.fillStyle = ['#ffe100', '#ffffff', '#ef3e36'][i % 3];
+        g.fillStyle = T.flowers[i % 3];
         g.fillRect(Math.round(x / 3) * 3, Math.round(y / 3) * 3, 3, 3);
+      }
+      if (T.moon) {
+        // Ciel de nuit : étoiles et lune dans le coin haut droit.
+        for (let i = 0; i < 60; i++) {
+          g.fillStyle = i % 4 ? 'rgba(255,255,255,0.5)' : '#fff6c9';
+          g.fillRect(Math.random() * W, 60 + Math.random() * H * 0.5, 2, 2);
+        }
+        const mx = W - 110, my = 120;
+        g.fillStyle = T.moon === 'full' ? '#ffcf7a' : '#fff1b8';
+        g.beginPath(); g.arc(mx, my, 36, 0, Math.PI * 2); g.fill();
+        if (T.moon === 'crescent') { g.fillStyle = base; g.beginPath(); g.arc(mx + 14, my - 8, 32, 0, Math.PI * 2); g.fill(); }
+        else { g.fillStyle = 'rgba(0,0,0,0.12)'; g.beginPath(); g.arc(mx - 10, my + 6, 9, 0, Math.PI * 2); g.arc(mx + 12, my - 10, 6, 0, Math.PI * 2); g.fill(); }
+      }
+      if (T.garland) {
+        // Guirlande lumineuse en haut de l'écran.
+        const cols = ['#ffd34d', '#ff9ec7', '#7fe3d0', '#ffffff'];
+        g.strokeStyle = 'rgba(255,255,255,0.5)'; g.lineWidth = 2;
+        g.beginPath();
+        for (let x = 0; x <= W; x += 8) g.lineTo(x, 66 + Math.sin(x / 70) * 10);
+        g.stroke();
+        for (let x = 20, i = 0; x < W; x += 46, i++) {
+          g.fillStyle = cols[i % cols.length];
+          g.beginPath(); g.arc(x, 72 + Math.sin(x / 70) * 10, 5, 0, Math.PI * 2); g.fill();
+        }
+      }
+      if (T.marelle) {
+        // Marelle à la craie, en bas à gauche de la cour.
+        g.strokeStyle = 'rgba(255,255,255,0.75)'; g.lineWidth = 3;
+        g.font = '600 16px "JetBrains Mono", monospace'; g.fillStyle = 'rgba(255,255,255,0.75)'; g.textAlign = 'center';
+        const x0 = 70, y0 = H - 90, c = 38;
+        const cells = [[0, 0, 1], [0, -1, 2], [-0.5, -2, 3], [0.5, -2, 4], [0, -3, 5], [-0.5, -4, 6], [0.5, -4, 7], [0, -5, 8]];
+        for (const [cx, cy, n] of cells) {
+          const x = x0 + cx * c, y = y0 + cy * c;
+          if (y < 90) continue;
+          g.strokeRect(x, y, c, c); g.fillText(n, x + c / 2, y + c / 2 + 6);
+        }
+      }
+    }
+
+    // Ce qui tombe du ciel : quelques dizaines de points, rien de lourd.
+    const FALL = {
+      snow: { n: 50, make: () => ({ vy: 30 + Math.random() * 40, vx: 0, size: 2 + Math.floor(Math.random() * 2) * 1, color: '#ffffff' }) },
+      petals: { n: 30, make: () => ({ vy: 35 + Math.random() * 25, vx: 25 + Math.random() * 20, size: 4, color: Math.random() < 0.5 ? '#ffb7d5' : '#ffd6e7' }) },
+      leaves: { n: 18, make: () => ({ vy: 30 + Math.random() * 20, vx: 10, size: 5, color: ['#e07b24', '#c9561c', '#e8b33c'][Math.floor(Math.random() * 3)] }) },
+      poppies: { n: 12, make: () => ({ vy: 20 + Math.random() * 15, vx: 8, size: 4, color: '#d7262e' }) },
+      confetti: { n: 36, make: () => ({ vy: 45 + Math.random() * 40, vx: 0, size: 4, color: T.confetti[Math.floor(Math.random() * T.confetti.length)] }) },
+      lanterns: { n: 8, make: () => ({ vy: -(12 + Math.random() * 10), vx: 0, size: 8, color: '#ffc94d', lantern: true }) },
+      bats: { n: 6, make: () => ({ vy: 0, vx: 60 + Math.random() * 50, size: 8, color: '#0b0812', bat: true }) },
+    };
+    function stepFall(dt) {
+      const kind = FALL[T.fall];
+      if (!kind) return;
+      while (fall.length < kind.n) {
+        const p = kind.make();
+        p.x = Math.random() * W; p.y = fall.length < kind.n / 2 && !p.bat ? Math.random() * H : p.vy < 0 ? H + 10 : -10;
+        if (p.bat) { p.x = -20; p.y = 80 + Math.random() * H * 0.5; }
+        p.phase = Math.random() * 6;
+        fall.push(p);
+      }
+      for (const p of fall) {
+        p.phase += dt * 2;
+        p.x += (p.vx + Math.sin(p.phase) * 15) * dt;
+        p.y += (p.vy + (p.bat ? Math.sin(p.phase * 3) * 30 : 0)) * dt;
+      }
+      fall = fall.filter((p) => p.y > -20 && p.y < H + 20 && p.x > -30 && p.x < W + 30);
+    }
+    function drawFall() {
+      for (const p of fall) {
+        if (p.bat) {
+          // Chauve-souris : deux ailes qui battent.
+          const flap = Math.sin(p.phase * 8) * 5;
+          ctx.fillStyle = p.color;
+          ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(p.x - 10, p.y - 4 - flap); ctx.lineTo(p.x - 5, p.y + 2); ctx.lineTo(p.x, p.y + 4);
+          ctx.lineTo(p.x + 5, p.y + 2); ctx.lineTo(p.x + 10, p.y - 4 - flap); ctx.closePath(); ctx.fill();
+        } else if (p.lantern) {
+          // Fanous : petite lanterne dorée qui monte doucement.
+          ctx.fillStyle = 'rgba(255,214,110,0.22)'; ctx.beginPath(); ctx.arc(p.x, p.y, 16, 0, Math.PI * 2); ctx.fill();
+          ctx.fillStyle = p.color; ctx.fillRect(Math.round(p.x - 5), Math.round(p.y - 7), 10, 14);
+          ctx.fillStyle = '#fff3c4'; ctx.fillRect(Math.round(p.x - 2), Math.round(p.y - 4), 4, 8);
+          ctx.fillStyle = '#b07a1a'; ctx.fillRect(Math.round(p.x - 6), Math.round(p.y - 9), 12, 3); ctx.fillRect(Math.round(p.x - 6), Math.round(p.y + 7), 12, 3);
+          ctx.fillRect(Math.round(p.x - 1), Math.round(p.y - 13), 2, 4);
+        } else {
+          ctx.fillStyle = p.color;
+          ctx.fillRect(Math.round(p.x), Math.round(p.y), p.size, p.size === 4 ? 3 : p.size);
+        }
+      }
+    }
+
+    // Buissons selon le décor : même place et même taille, seul le dessin change.
+    function drawObstacle(b, i) {
+      const r = b.r;
+      ctx.fillStyle = 'rgba(0,0,0,0.18)';
+      ctx.beginPath(); ctx.ellipse(b.x + 4, b.y + r * 0.6, r, r * 0.45, 0, 0, Math.PI * 2); ctx.fill();
+      if (T.obstacle === 'pumpkin') {
+        ctx.fillStyle = '#d9641a'; ctx.beginPath(); ctx.ellipse(b.x, b.y, r, r * 0.8, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#f07f22';
+        ctx.beginPath(); ctx.ellipse(b.x - r * 0.4, b.y, r * 0.4, r * 0.75, 0, 0, Math.PI * 2); ctx.ellipse(b.x + r * 0.4, b.y, r * 0.4, r * 0.75, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#3d7a2a'; ctx.fillRect(b.x - 3, b.y - r * 0.8 - 8, 6, 10);
+        ctx.fillStyle = Math.sin(state ? state.t * 6 + i : i) > -0.6 ? '#ffe36b' : '#ffb347';
+        const e = r * 0.28;
+        ctx.beginPath(); ctx.moveTo(b.x - e * 1.6, b.y - e * 0.2); ctx.lineTo(b.x - e * 0.6, b.y - e * 0.2); ctx.lineTo(b.x - e * 1.1, b.y - e * 1.1); ctx.closePath();
+        ctx.moveTo(b.x + e * 0.6, b.y - e * 0.2); ctx.lineTo(b.x + e * 1.6, b.y - e * 0.2); ctx.lineTo(b.x + e * 1.1, b.y - e * 1.1); ctx.closePath(); ctx.fill();
+        ctx.fillRect(b.x - e * 1.2, b.y + e * 0.6, e * 2.4, e * 0.6);
+      } else if (T.obstacle === 'sapin') {
+        ctx.fillStyle = '#6b4423'; ctx.fillRect(b.x - 4, b.y + r * 0.5, 8, r * 0.4);
+        for (let k = 0; k < 3; k++) {
+          const w = r * (1 - k * 0.25), y = b.y + r * 0.55 - k * r * 0.5;
+          ctx.fillStyle = k % 2 ? '#1f6b3a' : '#17592f';
+          ctx.beginPath(); ctx.moveTo(b.x - w, y); ctx.lineTo(b.x + w, y); ctx.lineTo(b.x, y - r * 0.8); ctx.closePath(); ctx.fill();
+          ctx.fillStyle = '#ffffff'; ctx.fillRect(b.x - w * 0.5, y - 3, w, 3);
+        }
+        ctx.fillStyle = '#ffe100'; ctx.fillRect(b.x - 3, b.y - r * 1.25 - 3, 6, 6);
+        ctx.fillStyle = ['#ef3e36', '#4a8cf0', '#ffe100'][i % 3]; ctx.fillRect(b.x + r * 0.25, b.y, 4, 4); ctx.fillRect(b.x - r * 0.4, b.y + r * 0.3, 4, 4);
+      } else if (T.obstacle === 'lantern') {
+        ctx.fillStyle = 'rgba(255,200,80,0.14)'; ctx.beginPath(); ctx.arc(b.x, b.y, r * 1.35, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#d62424'; ctx.beginPath(); ctx.ellipse(b.x, b.y, r, r * 0.8, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#ef3e36'; ctx.beginPath(); ctx.ellipse(b.x, b.y, r * 0.45, r * 0.8, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#ffc94d'; ctx.fillRect(b.x - r * 0.5, b.y - r * 0.85, r, 5); ctx.fillRect(b.x - r * 0.5, b.y + r * 0.8 - 5, r, 5);
+        ctx.fillRect(b.x - 1, b.y + r * 0.8, 2, 10); ctx.fillRect(b.x - 3, b.y + r * 0.8 + 10, 6, 6);
+      } else if (T.obstacle === 'cartable') {
+        const col = ['#e04f5f', '#4a8cf0', '#3bb273', '#f2a33a'][i % 4];
+        const w = r * 1.6, h = r * 1.3, x = b.x - w / 2, y = b.y - h / 2;
+        ctx.fillStyle = col; ctx.beginPath(); ctx.roundRect(x, y, w, h, 8); ctx.fill();
+        ctx.fillStyle = 'rgba(0,0,0,0.18)'; ctx.beginPath(); ctx.roundRect(x, y, w, h * 0.45, [8, 8, 4, 4]); ctx.fill();
+        ctx.fillStyle = '#ffe100'; ctx.fillRect(b.x - 5, y + h * 0.4, 10, 8);
+        ctx.strokeStyle = col; ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(b.x, y, w * 0.22, Math.PI, 0); ctx.stroke();
+      } else {
+        const [dark, light, berry] = T.bush || THEMES.normal.bush;
+        ctx.fillStyle = dark; ctx.beginPath(); ctx.arc(b.x, b.y, r, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = light; ctx.beginPath(); ctx.arc(b.x - r * 0.3, b.y - r * 0.3, r * 0.55, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = berry; ctx.fillRect(Math.round(b.x + r * 0.2), Math.round(b.y - r * 0.1), 4, 4);
+      }
+    }
+
+    // Chapeau de la poule selon le décor. La tête est à gauche du sprite,
+    // à droite quand elle court vers la droite.
+    function drawHat(hen, dy = 0) {
+      if (!T.hat) return;
+      const x = hen.x + (hen.face ? 9 : -9), y = hen.y - 22 + dy;
+      if (T.hat === 'santa') {
+        ctx.fillStyle = '#ef3e36'; ctx.beginPath(); ctx.moveTo(x - 9, y); ctx.lineTo(x + 9, y); ctx.lineTo(x + (hen.face ? -10 : 10), y - 14); ctx.closePath(); ctx.fill();
+        ctx.fillStyle = '#ffffff'; ctx.fillRect(x - 10, y - 2, 20, 5); ctx.fillRect(x + (hen.face ? -13 : 7), y - 17, 6, 6);
+      } else if (T.hat === 'witch') {
+        ctx.fillStyle = '#6a3fc9'; ctx.fillRect(x - 12, y - 2, 24, 4);
+        ctx.beginPath(); ctx.moveTo(x - 7, y); ctx.lineTo(x + 7, y); ctx.lineTo(x + (hen.face ? -4 : 4), y - 18); ctx.closePath(); ctx.fill();
+        ctx.fillStyle = '#ff7b1c'; ctx.fillRect(x - 7, y - 5, 14, 3);
+      } else if (T.hat === 'beanie') {
+        ctx.fillStyle = '#4a8cf0'; ctx.beginPath(); ctx.arc(x, y, 9, Math.PI, 0); ctx.fill();
+        ctx.fillStyle = '#ffffff'; ctx.fillRect(x - 10, y - 2, 20, 4); ctx.fillRect(x - 3, y - 13, 6, 5);
+      } else if (T.hat === 'headband') {
+        ctx.fillStyle = '#ffffff'; ctx.fillRect(x - 9, y + 2, 18, 4);
+        ctx.fillStyle = '#ef3e36'; ctx.fillRect(x - 2, y + 2, 4, 4);
+        ctx.fillStyle = '#ffffff'; ctx.fillRect(x + (hen.face ? -16 : 9), y + 3, 7, 2);
       }
     }
 
@@ -118,7 +392,10 @@
       H = cv.height = innerHeight;
       ctx.imageSmoothingEnabled = false;
       buildField();
-      if (state) state.bushes = state.bushes.filter((b) => b.x < W && b.y < H);
+      if (state) {
+        state.bushes = state.bushes.filter((b) => b.x < W && b.y < H);
+        state.burrows = state.burrows.filter((b) => b.x < W - 20 && b.y < H - 20);
+      }
     }
 
     const keys = new Set();
@@ -140,12 +417,35 @@
       return list;
     }
 
+    // Terriers : loin du centre, des buissons et l'un de l'autre.
+    function makeBurrows(bushes) {
+      const list = [];
+      for (let i = 0; i < 60 && list.length < 2; i++) {
+        const b = { x: 80 + Math.random() * (W - 160), y: 110 + Math.random() * (H - 180), cool: 0 };
+        if (Math.hypot(b.x - W / 2, b.y - H / 2) < 160) continue;
+        if (bushes.some((o) => Math.hypot(o.x - b.x, o.y - b.y) < o.r + 50)) continue;
+        if (list.some((o) => Math.hypot(o.x - b.x, o.y - b.y) < Math.min(W, H) / 2)) continue;
+        list.push(b);
+      }
+      return list;
+    }
+
+    // Bonus : plume (vitesse), tender (renards ralentis), bouclier (morsures renvoyées).
+    const POWERS = {
+      plume: { icon: '🪶', label: 'Plume · tu cours plus vite !', color: '#9ad1ff' },
+      tender: { icon: '🍗', label: 'Tender · les renards ralentissent !', color: '#ffb35c' },
+      shield: { icon: '🛡️', label: 'Bouclier · les renards qui mordent y passent !', color: '#7fe3d0' },
+    };
+    const POWER_TIME = 5;
+
     function newGame() {
+      const bushes = makeBushes();
       state = {
         t: 0, score: 0,
-        hen: { x: W / 2, y: H / 2, vx: 0, vy: 0, face: 1, frame: 0, sprint: 0, cooldown: 0 },
-        foxes: [spawnFox()],
-        corn: [], eggs: [], bushes: makeBushes(), scare: 0, nextCorn: 0, nextEgg: 8, floats: [],
+        hen: { x: W / 2, y: H / 2, vx: 0, vy: 0, face: 1, frame: 0, sprint: 0, cooldown: 0, hidden: null, hideLeft: 0, safe: 0 },
+        foxes: [spawnFox()], nextFoxAt: 0,
+        corn: [], eggs: [], bushes, burrows: makeBurrows(bushes), scare: 0, nextCorn: 0, nextEgg: 8, floats: [],
+        powers: [], nextPower: 6, fx: { plume: 0, tender: 0, shield: 0 },
       };
       running = true; paused = false;
       document.getElementById('start').classList.add('hidden');
@@ -156,7 +456,7 @@
       const side = Math.floor(Math.random() * 4);
       const x = side === 0 ? -40 : side === 1 ? W + 40 : Math.random() * W;
       const y = side === 2 ? -40 : side === 3 ? H + 40 : Math.random() * H;
-      return { x, y, face: 1, frame: 0, speed: 118 };
+      return { x, y, face: 1, frame: 0, speed: 110, ang: Math.random() * Math.PI * 2 };
     }
 
     function collideBushes(e, radius) {
@@ -171,8 +471,11 @@
     function update(dt) {
       const s = state;
       s.t += dt;
-      s.score += dt * (s.scare > 0 ? 2 : 1);
       const hen = s.hen;
+      // Caché dans un terrier, le score ne monte pas : pas de camping.
+      if (!hen.hidden) s.score += dt * (s.scare > 0 ? 2 : 1);
+      for (const k in s.fx) s.fx[k] = Math.max(0, s.fx[k] - dt);
+      hen.safe = Math.max(0, hen.safe - dt);
 
       // Contrôles (flèches, ZQSD, WASD, souris)
       let ix = 0, iy = 0;
@@ -188,28 +491,73 @@
       const len = Math.hypot(ix, iy) || 1;
       hen.cooldown = Math.max(0, hen.cooldown - dt);
       hen.sprint = Math.max(0, hen.sprint - dt);
-      const speed = 200 * (hen.sprint > 0 ? 1.9 : 1);
-      hen.vx = (ix / len) * speed;
-      hen.vy = (iy / len) * speed;
+      const speed = 200 * (hen.sprint > 0 ? 1.9 : 1) * (s.fx.plume > 0 ? 1.4 : 1);
+      if (T.slip) {
+        // Neige : la poule glisse, elle met un peu de temps à changer de direction.
+        const k = Math.min(1, dt * 5);
+        hen.vx += ((ix / len) * speed - hen.vx) * k;
+        hen.vy += ((iy / len) * speed - hen.vy) * k;
+      } else {
+        hen.vx = (ix / len) * speed;
+        hen.vy = (iy / len) * speed;
+      }
       hen.x = Math.min(W - 20, Math.max(20, hen.x + hen.vx * dt));
       hen.y = Math.min(H - 20, Math.max(56, hen.y + hen.vy * dt));
       collideBushes(hen, 18);
       if (ix) hen.face = ix > 0 ? 1 : 0;
       if (ix || iy) hen.frame += dt * (hen.sprint > 0 ? 14 : 8);
 
-      // Renards : vitesse croissante, un de plus toutes les 25 s (max 4)
-      const wanted = Math.min(4, 1 + Math.floor(s.t / 25));
-      while (s.foxes.length < wanted) { s.foxes.push(spawnFox()); float(W / 2, 80, 'Un autre renard arrive !', '#ef3e36'); }
+      // Terriers : on y entre en marchant dessus, 3 s maximum, puis il se
+      // referme 6 s. En sortant, la poule a 1 s de répit pour s'éloigner.
+      for (const b of s.burrows) b.cool = Math.max(0, b.cool - dt);
+      if (hen.hidden) {
+        const b = hen.hidden;
+        hen.hideLeft -= dt;
+        const out = Math.hypot(hen.x - b.x, hen.y - b.y) > 24;
+        if (out || hen.hideLeft <= 0) {
+          hen.hidden = null; b.cool = 6; hen.safe = 1;
+          if (!out) float(b.x, b.y - 30, 'Le terrier s’effondre, file !', '#ffe100');
+        }
+      } else {
+        const b = s.burrows.find((o) => o.cool <= 0 && Math.hypot(hen.x - o.x, hen.y - o.y) < 18);
+        if (b) { hen.hidden = b; hen.hideLeft = 3; hen.x = b.x; hen.y = b.y; float(b.x, b.y - 30, 'Cachée !', '#ffffff'); }
+      }
+
+      // Renards : jamais plus rapides que la poule (200). La difficulté monte
+      // avec leur nombre (un de plus toutes les 20 s, 6 au plus) et leur flair.
+      const wanted = Math.min(6, 1 + Math.floor(s.t / 20));
+      // Le prochain renard est tiré à l'avance pour annoncer d'où il viendra.
+      if (!s.incoming) s.incoming = spawnFox();
+      const n = s.foxes.length;
+      const due = n < wanted ? s.nextFoxAt : n < 6 ? Math.max(s.nextFoxAt, n * 20) : Infinity;
+      s.foxEta = due - s.t;
+      if (n < wanted && s.t >= s.nextFoxAt) {
+        s.foxes.push(s.incoming);
+        s.incoming = spawnFox();
+        s.nextFoxAt = s.t + 2;
+        if (s.t > 1) float(W / 2, 80, T.manga ? 'GRRR ! Un autre renard !' : 'Un autre renard arrive !', '#ef3e36');
+      }
       s.scare = Math.max(0, s.scare - dt);
+      const foxSpeed = Math.min(185, 110 + s.t * 1.2) * (s.fx.tender > 0 ? 0.5 : 1);
+      const lead = Math.min(0.6, 0.25 + s.t / 300);
       for (const f of s.foxes) {
-        f.speed = Math.min(250, 118 + s.t * 2.2);
-        let dx = hen.x - f.x, dy = hen.y - f.y;
-        // anticipation légère de la trajectoire de la poule
-        dx += hen.vx * 0.25; dy += hen.vy * 0.25;
+        f.speed = foxSpeed;
+        let dx, dy;
+        if (hen.hidden) {
+          // La poule a disparu : les renards rôdent autour du terrier.
+          f.ang += dt * 0.9;
+          dx = hen.hidden.x + Math.cos(f.ang) * 90 - f.x;
+          dy = hen.hidden.y + Math.sin(f.ang) * 90 - f.y;
+        } else {
+          // anticipation de la trajectoire de la poule, de plus en plus fine
+          dx = hen.x - f.x + hen.vx * lead;
+          dy = hen.y - f.y + hen.vy * lead;
+        }
         const d = Math.hypot(dx, dy) || 1;
-        const dir = s.scare > 0 ? -0.75 : 1;
-        f.x += (dx / d) * f.speed * dir * dt;
-        f.y += (dy / d) * f.speed * dir * dt;
+        const dir = s.scare > 0 && !hen.hidden ? -0.75 : 1;
+        const step = Math.min(d, f.speed * dt);
+        f.x += (dx / d) * step * dir;
+        f.y += (dy / d) * step * dir;
         // les renards s'écartent un peu les uns des autres
         for (const o of s.foxes) {
           if (o === f) continue;
@@ -220,8 +568,30 @@
         f.y = Math.min(H + 60, Math.max(-60, f.y));
         collideBushes(f, 20);
         f.face = (dx * dir) > 0 ? 1 : 0;
-        f.frame += dt * 9;
-        if (s.scare <= 0 && Math.hypot(hen.x - f.x, hen.y - f.y) < 30) return gameOver();
+        f.frame += dt * (s.fx.tender > 0 ? 4 : 9);
+        if (hen.hidden || Math.hypot(hen.x - f.x, hen.y - f.y) >= 30) continue;
+        if (s.fx.shield > 0) {
+          // La morsure se retourne contre lui ; un autre viendra dans 6 s.
+          f.dead = true; s.score += 30; s.nextFoxAt = s.t + 6;
+          float(f.x, f.y - 20, '+30 · renard KO !', POWERS.shield.color);
+        } else if (s.scare <= 0 && hen.safe <= 0) return gameOver();
+      }
+      s.foxes = s.foxes.filter((f) => !f.dead);
+
+      // Bonus : un à la fois, toutes les 10 à 15 s, 8 s pour l'attraper.
+      s.nextPower -= dt;
+      if (s.nextPower <= 0 && !s.powers.length) {
+        const types = Object.keys(POWERS);
+        s.powers.push({ ...randomSpot(), type: types[Math.floor(Math.random() * types.length)], life: 8 });
+        s.nextPower = 10 + Math.random() * 5;
+      }
+      for (let i = s.powers.length - 1; i >= 0; i--) {
+        const p = s.powers[i];
+        p.life -= dt;
+        if (Math.hypot(p.x - hen.x, p.y - hen.y) < 28) {
+          s.powers.splice(i, 1); s.fx[p.type] = POWER_TIME; s.score += 20;
+          float(p.x, p.y, POWERS[p.type].label, POWERS[p.type].color);
+        } else if (p.life <= 0) s.powers.splice(i, 1);
       }
 
       // Maïs et œufs d'or
@@ -245,12 +615,18 @@
       document.getElementById('score').textContent = Math.floor(s.score);
       document.getElementById('dash').style.width = (hen.cooldown > 0 ? 100 - (hen.cooldown / 3) * 100 : 100) + '%';
       document.getElementById('foxes').textContent = (s.scare > 0 ? '😱 ' : '🦊 ×') + (s.scare > 0 ? 'ils fuient !' : s.foxes.length);
+      const fx = Object.keys(POWERS).filter((k) => s.fx[k] > 0).map((k) => `${POWERS[k].icon} ${Math.ceil(s.fx[k])}s`);
+      if (hen.hidden) fx.unshift(`🕳️ ${Math.ceil(hen.hideLeft)}s`);
+      const pill = document.getElementById('fx');
+      pill.textContent = fx.join('  ');
+      pill.style.display = fx.length ? '' : 'none';
     }
 
     function randomSpot() {
       for (let i = 0; i < 30; i++) {
         const p = { x: 40 + Math.random() * (W - 80), y: 80 + Math.random() * (H - 120) };
-        if (!state.bushes.some((b) => Math.hypot(b.x - p.x, b.y - p.y) < b.r + 20)) return p;
+        if (state.bushes.some((b) => Math.hypot(b.x - p.x, b.y - p.y) < b.r + 20)) continue;
+        if (!state.burrows.some((b) => Math.hypot(b.x - p.x, b.y - p.y) < 50)) return p;
       }
       return { x: W / 2, y: H / 2 };
     }
@@ -258,43 +634,108 @@
 
     function draw() {
       ctx.drawImage(field, 0, 0);
-      if (!state) return;
+      if (!state) return drawFall();
       const s = state;
-      for (const b of s.bushes) {
-        ctx.fillStyle = 'rgba(0,0,0,0.18)';
-        ctx.beginPath(); ctx.ellipse(b.x + 4, b.y + b.r * 0.6, b.r, b.r * 0.45, 0, 0, Math.PI * 2); ctx.fill();
-        ctx.fillStyle = '#1d6b3d'; ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, Math.PI * 2); ctx.fill();
-        ctx.fillStyle = '#26874d'; ctx.beginPath(); ctx.arc(b.x - b.r * 0.3, b.y - b.r * 0.3, b.r * 0.55, 0, Math.PI * 2); ctx.fill();
-        ctx.fillStyle = '#ef3e36'; ctx.fillRect(Math.round(b.x + b.r * 0.2), Math.round(b.y - b.r * 0.1), 4, 4);
+      s.bushes.forEach(drawObstacle);
+      // Terriers : trou sombre bordé de terre, plus pâle tant qu'il est refermé.
+      for (const b of s.burrows) {
+        ctx.globalAlpha = b.cool > 0 ? 0.4 : 1;
+        ctx.fillStyle = '#7a5230'; ctx.beginPath(); ctx.ellipse(b.x, b.y + 4, 26, 15, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#1a120b'; ctx.beginPath(); ctx.ellipse(b.x, b.y + 4, 18, 9, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.globalAlpha = 1;
       }
       const bob = (Math.sin(s.t * 4) + 1) * 2;
-      for (const c of s.corn) ctx.drawImage(SPR.mais, Math.round(c.x - 9), Math.round(c.y - 9 - bob));
+      // Bonus : halo de couleur derrière le sprite (un disque, plus léger qu'un flou).
+      for (const p of s.powers) {
+        if (p.life < 2 && Math.floor(p.life * 8) % 2) continue;
+        const img = SPR[p.type];
+        ctx.globalAlpha = 0.35; ctx.fillStyle = POWERS[p.type].color;
+        ctx.beginPath(); ctx.arc(p.x, p.y - bob, 22, 0, Math.PI * 2); ctx.fill();
+        ctx.globalAlpha = 1;
+        ctx.drawImage(img, Math.round(p.x - img.width / 2), Math.round(p.y - bob - img.height / 2));
+      }
+      const item = SPR.item;
+      for (const c of s.corn) ctx.drawImage(item, Math.round(c.x - item.width / 2), Math.round(c.y - item.height / 2 - bob));
       for (const e of s.eggs) {
         if (e.life < 2 && Math.floor(e.life * 8) % 2) continue;
-        ctx.save();
-        ctx.shadowColor = '#ffe100'; ctx.shadowBlur = 18;
-        ctx.drawImage(SPR.oeuf, Math.round(e.x - 15), Math.round(e.y - 15 - bob));
-        ctx.restore();
+        ctx.globalAlpha = 0.3; ctx.fillStyle = '#ffe100';
+        ctx.beginPath(); ctx.arc(e.x, e.y - bob, 24, 0, Math.PI * 2); ctx.fill();
+        ctx.globalAlpha = 1;
+        ctx.drawImage(SPR.egg, Math.round(e.x - SPR.egg.width / 2), Math.round(e.y - SPR.egg.height / 2 - bob));
       }
       const shadow = (x, y, w) => { ctx.fillStyle = 'rgba(0,0,0,0.22)'; ctx.beginPath(); ctx.ellipse(x, y + 20, w, 6, 0, 0, Math.PI * 2); ctx.fill(); };
       // Poule
       const hen = s.hen;
-      shadow(hen.x, hen.y, 16);
       const hf = SPR.poule[hen.face][Math.floor(hen.frame) % 2];
-      if (hen.sprint > 0) { ctx.globalAlpha = 0.3; ctx.drawImage(hf, Math.round(hen.x - 24 - hen.vx * 0.05), Math.round(hen.y - 26 - hen.vy * 0.05)); ctx.globalAlpha = 1; }
-      ctx.drawImage(hf, Math.round(hen.x - 24), Math.round(hen.y - 26));
+      if (hen.hidden) {
+        // Seule la tête dépasse du terrier.
+        ctx.save();
+        ctx.beginPath(); ctx.rect(hen.x - 30, hen.y - 60, 60, 60); ctx.clip();
+        ctx.drawImage(hf, Math.round(hen.x - 24), Math.round(hen.y - 30));
+        drawHat(hen, -4);
+        ctx.restore();
+      } else {
+        shadow(hen.x, hen.y, 16);
+        const fast = hen.sprint > 0 || s.fx.plume > 0;
+        if (fast && T.manga && (hen.vx || hen.vy)) {
+          // Traits de vitesse façon anime derrière la poule.
+          const v = Math.hypot(hen.vx, hen.vy), ux = hen.vx / v, uy = hen.vy / v;
+          ctx.strokeStyle = 'rgba(255,255,255,0.8)'; ctx.lineWidth = 2;
+          ctx.beginPath();
+          for (let k = -2; k <= 2; k++) {
+            const ox = hen.x - ux * 30 - uy * k * 8, oy = hen.y - uy * 30 + ux * k * 8;
+            const l = 18 + ((k + 3) * 7) % 16;
+            ctx.moveTo(ox, oy); ctx.lineTo(ox - ux * l, oy - uy * l);
+          }
+          ctx.stroke();
+        }
+        if (fast) { ctx.globalAlpha = 0.3; ctx.drawImage(hf, Math.round(hen.x - 24 - hen.vx * 0.05), Math.round(hen.y - 26 - hen.vy * 0.05)); ctx.globalAlpha = 1; }
+        if (hen.safe > 0) ctx.globalAlpha = Math.floor(s.t * 12) % 2 ? 0.35 : 1;
+        ctx.drawImage(hf, Math.round(hen.x - 24), Math.round(hen.y - 26));
+        drawHat(hen);
+        ctx.globalAlpha = 1;
+        if (s.fx.shield > 0 && (s.fx.shield > 1 || Math.floor(s.t * 10) % 2)) {
+          ctx.strokeStyle = POWERS.shield.color; ctx.lineWidth = 3;
+          ctx.globalAlpha = 0.7 + Math.sin(s.t * 8) * 0.2;
+          ctx.beginPath(); ctx.arc(hen.x, hen.y - 2, 32, 0, Math.PI * 2); ctx.stroke();
+          ctx.globalAlpha = 1;
+        }
+      }
       // Renards
       for (const f of s.foxes) {
         shadow(f.x, f.y - 8, 20);
         if (s.scare > 0) ctx.globalAlpha = 0.65 + Math.sin(s.t * 20) * 0.2;
         ctx.drawImage(SPR.renard[f.face][Math.floor(f.frame) % 2], Math.round(f.x - 24), Math.round(f.y - 28));
         ctx.globalAlpha = 1;
+        if (s.fx.tender > 0) ctx.drawImage(SPR.tender, Math.round(f.x - 9), Math.round(f.y - 48), 18, 18);
+      }
+      drawFall();
+      // Annonce du prochain renard : flèche rouge au bord, d'où il va surgir.
+      if (s.incoming && s.foxEta > 0 && s.foxEta <= 3) {
+        const a = s.incoming;
+        const mx = Math.min(W - 34, Math.max(34, a.x)), my = Math.min(H - 34, Math.max(84, a.y));
+        const ang = Math.atan2(a.y - my, a.x - mx);
+        const pulse = 0.6 + Math.sin(s.t * 12) * 0.4;
+        ctx.save();
+        ctx.globalAlpha = pulse;
+        ctx.fillStyle = 'rgba(239,62,54,0.25)';
+        ctx.beginPath(); ctx.arc(mx, my, 26, 0, Math.PI * 2); ctx.fill();
+        ctx.translate(mx, my); ctx.rotate(ang);
+        ctx.fillStyle = '#ef3e36';
+        ctx.beginPath(); ctx.moveTo(26, 0); ctx.lineTo(10, -10); ctx.lineTo(10, 10); ctx.closePath(); ctx.fill();
+        ctx.restore();
+        ctx.font = '600 15px "JetBrains Mono", monospace';
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillStyle = '#fff';
+        ctx.fillText('🦊' + Math.ceil(s.foxEta), mx, my);
+        ctx.textBaseline = 'alphabetic';
       }
       ctx.font = '600 16px "JetBrains Mono", monospace';
       ctx.textAlign = 'center';
       for (const f of s.floats) {
         ctx.globalAlpha = Math.min(1, f.life * 1.5);
-        ctx.fillStyle = '#0e0e10'; ctx.fillText(f.text, f.x + 1, f.y + 1);
+        // Contour sombre : lisible sur l'herbe comme sur la neige.
+        ctx.strokeStyle = '#0e0e10'; ctx.lineWidth = 3; ctx.lineJoin = 'round'; ctx.strokeText(f.text, f.x, f.y);
         ctx.fillStyle = f.color; ctx.fillText(f.text, f.x, f.y);
       }
       ctx.globalAlpha = 1;
@@ -319,6 +760,7 @@
       const dt = Math.min(0.05, (ts - last) / 1000 || 0);
       last = ts;
       if (running && !paused) update(dt);
+      if (!paused) stepFall(dt);
       draw();
       requestAnimationFrame(loop);
     }
@@ -329,7 +771,10 @@
         if (!running) { newGame(); e.preventDefault(); return; }
       }
       if (k === 'p' || k === 'escape') { if (running) paused = !paused; return; }
-      if (k === ' ' && running && state.hen.cooldown <= 0) { state.hen.sprint = 0.6; state.hen.cooldown = 3; }
+      if (k === ' ' && running && !paused && state.hen.cooldown <= 0) {
+        state.hen.sprint = 0.6; state.hen.cooldown = 3;
+        if (T.manga) float(state.hen.x, state.hen.y - 40, 'ZOOM !', '#ffffff');
+      }
       if (k.startsWith('arrow') || k === ' ') e.preventDefault();
       keys.add(k);
     });
@@ -366,6 +811,7 @@
     }
 
     addEventListener('resize', resize);
+    applyTheme();
     resize();
     requestAnimationFrame(loop);
   })();
