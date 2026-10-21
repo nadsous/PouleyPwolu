@@ -674,7 +674,7 @@
       { label: 'Paramètres', icon: 'reglages', run: () => openSettings() },
       { label: 'Coffre à mots de passe', icon: 'cle', run: () => openVault() },
       { label: 'Inspecter le site (vie privée, technos, couleurs)', icon: 'inspecter', run: () => toggleInspector(true) },
-      { label: `Ouvrir ${ai.label}`, logo: s.ai, run: () => api.cmd('ai.toggle') },
+      { label: 'Ouvrir l’assistant IA (extension)', icon: 'ia', run: () => api.cmd('ai.toggle') },
       { label: `Résumer la page avec ${ai.label}`, logo: s.ai, run: () => api.cmd('ai.askPage') },
       { label: 'Onglet éphémère (rien n’est gardé)', icon: 'fantome', run: () => api.cmd('tab.new', { ephemeral: true }) },
       { label: 'Rouvrir le dernier onglet fermé', icon: 'retour', run: () => api.cmd('tab.reopen') },
@@ -862,7 +862,7 @@
   let settingsView = localStorage.getItem('pouley-settings-view') === 'code' ? 'code' : 'simple';
 
   const SETTINGS_FILES = [
-    { id: 'ia', file: 'ia.config', icon: 'ia', tint: '#c678dd', label: 'Assistant IA', desc: 'L’IA qui t’aide à côté de tes pages.' },
+    { id: 'ia', file: 'ia.config', icon: 'ia', tint: '#c678dd', label: 'Assistant IA', desc: 'Claude et ChatGPT dans un panneau à droite : ils lisent tes pages et agissent dessus.' },
     { id: 'recherche', file: 'recherche.config', icon: 'inspecter', tint: '#61afef', label: 'Recherche', desc: 'Le moteur utilisé quand tu tapes autre chose qu’une adresse.' },
     { id: 'barre', file: 'barre.layout', icon: 'barre-gauche', tint: '#e5c07b', label: 'Barre des onglets', desc: 'Où elle se place et comment elle se comporte.' },
     { id: 'apparence', file: 'fenetre.style', icon: 'theme', tint: '#56b6c2', label: 'Apparence', desc: 'Transparence de la fenêtre et thème.' },
@@ -878,15 +878,32 @@
 
   const opt = (code, label, note, extra) => ({ code, label, note, ...extra });
 
+  // Assistants IA : les extensions officielles, qui pilotent les onglets.
+  const AI_EXTENSIONS = [
+    { key: 'claude', id: 'fcoeoabgfenejglbffodgkkbkcdhcgfn', name: 'Claude', by: 'Anthropic', logo: 'claude',
+      desc: 'Lit la page, clique, remplit et navigue pour toi. Il faut un forfait Claude payant.' },
+    { key: 'chatgpt', id: 'hehggadaopoacecdllhhajmbjkdcmajg', name: 'ChatGPT', by: 'OpenAI', logo: 'chatgpt',
+      desc: 'Lit tes onglets, les range et peut agir dessus. Il faut un compte ChatGPT.' },
+  ];
+  const aiExtOf = (x) => (snap.userExtensions || []).find((e) => e.id === x.id && e.available) || null;
+  // Installée : ouvre son panneau (Ctrl+E). Sinon : l'installer depuis le Chrome Web Store.
+  function aiExtRun(x) {
+    const e = aiExtOf(x);
+    if (!e) return installExtension(x.id);
+    closeOverlay();
+    if (e.enabled === false) api.cmd('ext.enable', { id: e.id, on: true });
+    api.cmd('ext.popup', { id: e.id });
+  }
+
   // Description déclarative des réglages de chaque section.
   function sectionItems(id) {
     const st = S();
     const glass = st.windowMaterial && st.windowMaterial !== 'none';
     switch (id) {
       case 'ia': return [
-        { type: 'choice', set: 'ai', name: 'ia', label: 'Ton assistant', help: 'Il s’ouvre dans un panneau à droite (Ctrl+E). Tu peux aussi taper « ? » suivi de ta question dans la barre d’adresse.',
+        ...AI_EXTENSIONS.map((x) => ({ type: 'aiext', ai: x, name: x.key, label: x.name })),
+        { type: 'choice', set: 'ai', name: 'questions_rapides', label: 'Questions rapides', help: 'Tape « ? » suivi de ta question dans la barre d’adresse : la réponse s’ouvre dans un nouvel onglet.',
           options: Object.fromEntries(Object.entries(AI_PROVIDERS).map(([k, v]) => [k, opt(k, v.label, 'par ' + v.by, { logo: true })])) },
-        { type: 'actions', items: [{ label: 'Ouvrir l’assistant', run: () => api.cmd('ai.toggle') }, { label: 'Résumer la page actuelle', run: () => api.cmd('ai.askPage') }] },
       ];
       case 'recherche': return [
         { type: 'choice', set: 'searchEngine', name: 'moteur', label: 'Moteur de recherche', help: 'Utilisé depuis la barre d’adresse et la page Nouvel onglet.',
@@ -1121,6 +1138,18 @@
             h('button', { class: 'btn nads', onclick: go }, 'Installer'),
             h('button', { class: 'btn', onclick: () => { closeOverlay(); api.cmd('tab.new', { url: 'https://chromewebstore.google.com/' }); } }, 'Parcourir le store')));
       }
+      case 'aiext': {
+        const x = it.ai;
+        const e = aiExtOf(x);
+        return h('div', { class: 'set-ext' + (e ? ' on' : '') },
+          e && e.icon ? h('img', { class: 'set-ext-ic', src: e.icon, alt: '' }) : h('span', { class: 'set-ext-ic' }, logo(x.logo)),
+          h('div', { class: 'set-txt' },
+            h('div', { class: 'set-ext-title' }, h('b', null, x.name), h('span', { class: 'set-ext-ver' }, 'par ' + x.by)),
+            h('p', null, x.desc),
+            h('span', { class: 'set-ext-status' }, e ? 'Installée' + (e.enabled === false ? ' · désactivée' : '') : 'Pas encore installée'),
+            h('div', { class: 'set-actions ext-card-actions' },
+              h('button', { class: 'btn nads', onclick: () => aiExtRun(x) }, e ? 'Ouvrir le panneau' : 'Installer'))));
+      }
       case 'userext': {
         const e = it.ext;
         const on = e.enabled !== false && e.available;
@@ -1206,6 +1235,11 @@
         const v = it.ext.enabled !== false;
         value = h('button', { class: 'tk-bool' + (v ? ' on' : ''), onclick: () => api.cmd('ext.enable', { id: it.ext.id, on: !v }) }, h('i'), tk('kw', String(v)));
         lines.push({ name: it.name, value, comment: it.ext.name + ' ' + (it.ext.version || '') + ' (Chrome Web Store)' });
+        continue;
+      } else if (it.type === 'aiext') {
+        const e = aiExtOf(it.ai);
+        lines.push({ raw: h('span', { class: 'tk-cmd' }, tk('pn', '$ '), tk('fn', 'pouley'), ' ', tk('st', e ? 'ia --ouvrir ' + it.ai.key : 'extension --ajouter ' + it.ai.key), '  ',
+          h('button', { class: 'tk-lens', onclick: () => aiExtRun(it.ai) }, '▶ Exécuter')) });
         continue;
       } else if (it.type === 'extadd') {
         lines.push({ raw: h('span', { class: 'tk-cmd' }, tk('pn', '$ '), tk('fn', 'pouley'), ' ', tk('st', 'extension --ajouter <lien du Chrome Web Store>'), '  ',
@@ -1675,6 +1709,8 @@
     });
   });
   api.on('fullscreen', (on) => document.body.classList.toggle('fullscreen-html', on));
+  // Ctrl+E sans extension IA installée : on montre où l'installer.
+  api.on('settings:open', (file) => openSettings(file));
   let updateToastShown = null;
   api.on('update', (u) => {
     if (snap) snap.update = u;

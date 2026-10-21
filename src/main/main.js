@@ -114,7 +114,7 @@ const NADSPDF_APP = ['C:\\Program Files\\NadsPDF\\nadspdf.exe', path.join(proces
 const EXTENSIONS = [
   {
     key: 'nadspdf', setting: 'extNadspdf', dir: path.join(EXT_ROOT, 'nadspdf'),
-    status: 'Préinstallée · en cours de validation sur le Chrome Web Store',
+    status: 'Préinstallée · disponible sur le Chrome Web Store',
     handlesPdf: true,
   },
 ].map((e) => {
@@ -1395,16 +1395,27 @@ const extGroups = {
   update: (id, { name, color, collapsed }) => commands['group.update']({ id, name, color, collapsed }),
 };
 
+// Questions rapides (« ? » dans la barre d'adresse) : la réponse s'ouvre dans
+// un onglet. Le panneau de droite est réservé aux extensions IA.
 function aiAsk(prompt) {
-  ensureAiView();
-  aiView.webContents.loadURL(askUrl(prompt)).catch(() => {});
-  setAiOpen(true);
+  openTab({ url: askUrl(prompt) });
 }
 
 function aiAskPage() {
   const f = currentTabId && findTab(currentTabId);
-  if (!f || !/^https?:/.test(f.rec.url)) return setAiOpen(true);
+  if (!f || !/^https?:/.test(f.rec.url)) return aiAsk('');
   aiAsk(`Résume et analyse cette page en français : ${f.rec.url}`);
+}
+
+// Extensions IA connues : leur panneau remplace l'ancien panneau IA.
+const AI_EXTENSIONS = ['fcoeoabgfenejglbffodgkkbkcdhcgfn', 'hehggadaopoacecdllhhajmbjkdcmajg']; // Claude, ChatGPT
+// Ctrl+E : ouvre ou ferme le panneau de l'extension IA installée.
+function toggleAiExtension() {
+  if (extPanel) return closeExtPanel();
+  const installed = extHost ? extHost.list().filter((e) => e.enabled !== false) : [];
+  const ext = AI_EXTENSIONS.map((id) => installed.find((e) => e.id === id)).find(Boolean);
+  if (ext) extHost.showPopup(ext.id).catch(() => {});
+  else sendUi('settings:open', 'ia');
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1608,7 +1619,7 @@ function handleShortcut(input, fromPage) {
     case 'k': if (!shift) return fire('new-tab'); if (split) commands['split.end'](); else fire('split'); return true;
     case 'f': return fire('find');
     case 'i': return fire('inspector');
-    case 'e': setAiOpen(!aiOpen); return true;
+    case 'e': toggleAiExtension(); return true;
     case 'd': if (shift) { penToggle(); return true; } if (currentTabId) togglePin(currentTabId); return true;
     case 'c':
       if (!shift) return false;
@@ -2820,7 +2831,7 @@ const commands = {
   },
   'views.hidden': (hidden) => { viewsHidden = !!hidden; applyLayout(); if (!hidden) { const wc = currentContents(); if (wc) wc.focus(); } },
 
-  'ai.toggle': () => (extPanel ? closeExtPanel() : setAiOpen(!aiOpen)),
+  'ai.toggle': () => (aiOpen ? setAiOpen(false) : toggleAiExtension()),
   'ext.panelClose': () => closeExtPanel(),
   'ext.agentStop': (tabId) => { const r = runtime.get(tabId); const wc = viewContents(r); if (wc) extHost.stopAgent(wc.id); },
   'ai.ask': (prompt) => aiAsk(String(prompt || '')),
@@ -3248,6 +3259,9 @@ function createWindow() {
     win = null;
     for (const fw of floats.values()) if (!fw.isDestroyed()) fw.destroy();
     floats.clear();
+    // Les fenêtres cachées des extensions (offscreen) empêcheraient sinon
+    // « window-all-closed » : l'app resterait en fond, sans fenêtre.
+    app.quit();
   });
 }
 
@@ -3294,7 +3308,8 @@ function makeDefaultBrowser() {
 }
 
 app.on('second-instance', (_e, argv) => {
-  if (!win) return;
+  // Instance restée en fond sans fenêtre : on redémarre proprement.
+  if (!win) { app.relaunch({ args: argv.slice(1) }); return app.quit(); }
   if (win.isMinimized()) win.restore();
   win.focus();
   openFromArgv(argv);

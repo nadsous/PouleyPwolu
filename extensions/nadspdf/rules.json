@@ -5,7 +5,7 @@
         "action":  {
                        "type":  "redirect",
                        "redirect":  {
-                                        "regexSubstitution":  "chrome-extension://dkoohdpnfiphcimpklkphfbjibbaenje/index.html?lite=1\u0026lang=fr#file=\\0"
+                                        "regexSubstitution":  "chrome-extension://hjbgmlcjbnphhblmmhbjdjmflejflnfh/index.html?lite=1\u0026lang=fr#file=\\0"
                                     }
                    },
         "condition":  {
@@ -24,7 +24,7 @@
         "action":  {
                        "type":  "redirect",
                        "redirect":  {
-                                        "regexSubstitution":  "chrome-extension://dkoohdpnfiphcimpklkphfbjibbaenje/index.html?lite=1\u0026lang=fr#file=\\0"
+                                        "regexSubstitution":  "chrome-extension://hjbgmlcjbnphhblmmhbjdjmflejflnfh/index.html?lite=1\u0026lang=fr#file=\\0"
                                     }
                    },
         "condition":  {
@@ -40,7 +40,7 @@
         "action":  {
                        "type":  "redirect",
                        "redirect":  {
-                                        "regexSubstitution":  "chrome-extension://dkoohdpnfiphcimpklkphfbjibbaenje/index.html?lite=1\u0026lang=fr#file=\\0"
+                                        "regexSubstitution":  "chrome-extension://hjbgmlcjbnphhblmmhbjdjmflejflnfh/index.html?lite=1\u0026lang=fr#file=\\0"
                                     }
                    },
         "condition":  {
