@@ -22,6 +22,12 @@ if ($LASTEXITCODE) { exit 1 }
 $root = Split-Path $PSScriptRoot -Parent
 $ucw = Join-Path $Work 'ucw'
 $build = "$ucw\build"
+# Sources à moitié préparées (compilation arrêtée pendant la décompression) : build.py ne
+# saurait pas les reprendre, on repart de zéro en gardant les archives téléchargées.
+if (-not $Clean -and (Test-Path "$build\src") -and -not (Test-Path "$build\src\BUILD.gn")) {
+  Write-Host 'Sources incomplètes d''une compilation interrompue : nettoyage.'
+  $Clean = $true
+}
 if ($Clean -and (Test-Path $build)) {
   Get-ChildItem $build -Force | Where-Object { $_.Name -ne 'download_cache' } | Remove-Item -Recurse -Force
 }
