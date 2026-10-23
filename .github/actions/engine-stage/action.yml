@@ -1,0 +1,16 @@
+# Repris d'ungoogled-chromium-windows (BSD-3, voir NOTICE.md). Une étape compile ~3 h 30,
+# puis passe le relais à la suivante via un artefact ; la dernière publie l'installateur.
+name: Étape de compilation du moteur
+inputs:
+  finished:
+    description: Une étape précédente a déjà fini la compilation
+    required: true
+  from_artifact:
+    description: Reprendre la compilation laissée par l'étape précédente
+    required: true
+outputs:
+  finished:
+    description: La compilation est terminée
+runs:
+  using: node24
+  main: index.js

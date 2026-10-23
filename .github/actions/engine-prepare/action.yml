@@ -1,0 +1,29 @@
+name: Préparer la compilation du moteur
+description: Python, ungoogled-chromium-windows à la version figée avec nos patches, SDK Windows, dépendances de l'étape
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-python@v6
+      with:
+        python-version: '3.12'
+
+    # Même dossier que la CI d'ungoogled-chromium-windows : leur build.py et nos chemins s'y attendent.
+    - name: ungoogled-chromium-windows + patches PouleyPwolu
+      shell: pwsh
+      run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts\prepare.ps1 -Ucw C:\ungoogled-chromium-windows
+
+    - name: Dépendances de l'étape
+      shell: pwsh
+      run: npm install --no-audit --no-fund
+      working-directory: ./.github/actions/engine-stage
+
+    - name: Windows SDK 10.0.28000.0
+      shell: pwsh
+      run: |
+        if (Test-Path 'C:\Program Files (x86)\Windows Kits\10\Include\10.0.28000.0') { exit 0 }
+        $installer = "$env:TEMP\winsdksetup.exe"
+        Invoke-WebRequest -Uri 'https://download.microsoft.com/download/38ab8f6d-3676-4860-ae84-3361308b9d7f/KIT_BUNDLE_WINDOWSSDK_MEDIACREATION/winsdksetup.exe' -OutFile $installer
+        $features = '/features OptionId.DesktopCPPx64 OptionId.WindowsDesktopDebuggers OptionId.SigningTools /q /norestart /ceip off'
+        $proc = Start-Process -FilePath $installer -ArgumentList $features -PassThru -Wait
+        if ($proc.ExitCode -ne 0) { throw "winsdksetup.exe a échoué ($($proc.ExitCode))" }
+        if (-not (Test-Path 'C:\Program Files (x86)\Windows Kits\10\Include\10.0.28000.0')) { throw 'SDK 10.0.28000.0 absent après installation.' }

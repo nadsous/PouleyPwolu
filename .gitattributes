@@ -3,3 +3,5 @@
 engine/patches/series text eol=lf
 *.gn text eol=lf
 *.ps1 text eol=crlf
+*.sh text eol=lf
+.github/** text eol=lf

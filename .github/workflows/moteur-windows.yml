@@ -1,0 +1,253 @@
+# Compile le moteur Chromium de PouleyPwolu (Windows x64) sur les machines GitHub gratuites.
+# Une machine gratuite s'arrête après 6 h : la compilation est découpée en étapes de ~3 h 30
+# qui se passent le relais par artefact (comme ungoogled-chromium-windows). Compter 1 à 2 jours.
+# Résultat : l'artefact « chromium » (installateur .exe et .zip) de l'exécution.
+# Généré par scripts/gen-engine-workflow.sh : modifier le script, pas ce fichier.
+name: moteur-windows
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'moteur-*'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: moteur-windows-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  etape-1:
+    runs-on: windows-2022
+    timeout-minutes: 350
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/engine-prepare
+      - id: stage
+        uses: ./.github/actions/engine-stage
+        with:
+          finished: false
+          from_artifact: false
+    outputs:
+      finished: ${{ steps.stage.outputs.finished }}
+  etape-2:
+    needs: etape-1
+    runs-on: windows-2022
+    timeout-minutes: 350
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/engine-prepare
+      - id: stage
+        uses: ./.github/actions/engine-stage
+        with:
+          finished: ${{ needs.etape-1.outputs.finished }}
+          from_artifact: true
+    outputs:
+      finished: ${{ steps.stage.outputs.finished }}
+  etape-3:
+    needs: etape-2
+    runs-on: windows-2022
+    timeout-minutes: 350
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/engine-prepare
+      - id: stage
+        uses: ./.github/actions/engine-stage
+        with:
+          finished: ${{ needs.etape-2.outputs.finished }}
+          from_artifact: true
+    outputs:
+      finished: ${{ steps.stage.outputs.finished }}
+  etape-4:
+    needs: etape-3
+    runs-on: windows-2022
+    timeout-minutes: 350
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/engine-prepare
+      - id: stage
+        uses: ./.github/actions/engine-stage
+        with:
+          finished: ${{ needs.etape-3.outputs.finished }}
+          from_artifact: true
+    outputs:
+      finished: ${{ steps.stage.outputs.finished }}
+  etape-5:
+    needs: etape-4
+    runs-on: windows-2022
+    timeout-minutes: 350
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/engine-prepare
+      - id: stage
+        uses: ./.github/actions/engine-stage
+        with:
+          finished: ${{ needs.etape-4.outputs.finished }}
+          from_artifact: true
+    outputs:
+      finished: ${{ steps.stage.outputs.finished }}
+  etape-6:
+    needs: etape-5
+    runs-on: windows-2022
+    timeout-minutes: 350
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/engine-prepare
+      - id: stage
+        uses: ./.github/actions/engine-stage
+        with:
+          finished: ${{ needs.etape-5.outputs.finished }}
+          from_artifact: true
+    outputs:
+      finished: ${{ steps.stage.outputs.finished }}
+  etape-7:
+    needs: etape-6
+    runs-on: windows-2022
+    timeout-minutes: 350
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/engine-prepare
+      - id: stage
+        uses: ./.github/actions/engine-stage
+        with:
+          finished: ${{ needs.etape-6.outputs.finished }}
+          from_artifact: true
+    outputs:
+      finished: ${{ steps.stage.outputs.finished }}
+  etape-8:
+    needs: etape-7
+    runs-on: windows-2022
+    timeout-minutes: 350
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/engine-prepare
+      - id: stage
+        uses: ./.github/actions/engine-stage
+        with:
+          finished: ${{ needs.etape-7.outputs.finished }}
+          from_artifact: true
+    outputs:
+      finished: ${{ steps.stage.outputs.finished }}
+  etape-9:
+    needs: etape-8
+    runs-on: windows-2022
+    timeout-minutes: 350
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/engine-prepare
+      - id: stage
+        uses: ./.github/actions/engine-stage
+        with:
+          finished: ${{ needs.etape-8.outputs.finished }}
+          from_artifact: true
+    outputs:
+      finished: ${{ steps.stage.outputs.finished }}
+  etape-10:
+    needs: etape-9
+    runs-on: windows-2022
+    timeout-minutes: 350
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/engine-prepare
+      - id: stage
+        uses: ./.github/actions/engine-stage
+        with:
+          finished: ${{ needs.etape-9.outputs.finished }}
+          from_artifact: true
+    outputs:
+      finished: ${{ steps.stage.outputs.finished }}
+  etape-11:
+    needs: etape-10
+    runs-on: windows-2022
+    timeout-minutes: 350
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/engine-prepare
+      - id: stage
+        uses: ./.github/actions/engine-stage
+        with:
+          finished: ${{ needs.etape-10.outputs.finished }}
+          from_artifact: true
+    outputs:
+      finished: ${{ steps.stage.outputs.finished }}
+  etape-12:
+    needs: etape-11
+    runs-on: windows-2022
+    timeout-minutes: 350
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/engine-prepare
+      - id: stage
+        uses: ./.github/actions/engine-stage
+        with:
+          finished: ${{ needs.etape-11.outputs.finished }}
+          from_artifact: true
+    outputs:
+      finished: ${{ steps.stage.outputs.finished }}
+  etape-13:
+    needs: etape-12
+    runs-on: windows-2022
+    timeout-minutes: 350
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/engine-prepare
+      - id: stage
+        uses: ./.github/actions/engine-stage
+        with:
+          finished: ${{ needs.etape-12.outputs.finished }}
+          from_artifact: true
+    outputs:
+      finished: ${{ steps.stage.outputs.finished }}
+  etape-14:
+    needs: etape-13
+    runs-on: windows-2022
+    timeout-minutes: 350
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/engine-prepare
+      - id: stage
+        uses: ./.github/actions/engine-stage
+        with:
+          finished: ${{ needs.etape-13.outputs.finished }}
+          from_artifact: true
+    outputs:
+      finished: ${{ steps.stage.outputs.finished }}
+  etape-15:
+    needs: etape-14
+    runs-on: windows-2022
+    timeout-minutes: 350
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/engine-prepare
+      - id: stage
+        uses: ./.github/actions/engine-stage
+        with:
+          finished: ${{ needs.etape-14.outputs.finished }}
+          from_artifact: true
+    outputs:
+      finished: ${{ steps.stage.outputs.finished }}
+  etape-16:
+    needs: etape-15
+    runs-on: windows-2022
+    timeout-minutes: 350
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/engine-prepare
+      - id: stage
+        uses: ./.github/actions/engine-stage
+        with:
+          finished: ${{ needs.etape-15.outputs.finished }}
+          from_artifact: true
+    outputs:
+      finished: ${{ steps.stage.outputs.finished }}
+  fin:
+    needs: etape-16
+    runs-on: ubuntu-latest
+    steps:
+      - name: Compilation terminée ?
+        run: |
+          if [ "${{ needs.etape-16.outputs.finished }}" != "true" ]; then
+            echo "La compilation n'a pas fini en 16 étapes."
+            exit 1
+          fi

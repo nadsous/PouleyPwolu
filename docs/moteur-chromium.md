@@ -48,6 +48,16 @@ Après un changement de patch, de réglage ou de version, le script demande `-Cl
 Le navigateur compilé est dans `C:\pw\ucw\build\src\out\Default\chrome.exe`,
 l'installateur et le zip dans `C:\pw\ucw\build`.
 
+## Compiler gratuitement sur GitHub
+
+Le workflow `moteur-windows` compile sur les machines GitHub gratuites, sans rien installer :
+onglet **Actions** → **moteur-windows** → **Run workflow**, ou pousser un tag `moteur-<version>`.
+Une machine gratuite s'arrête après 6 h, donc la compilation est découpée en 16 étapes
+d'environ 3 h 30. Chaque étape passe le relais à la suivante via un artefact. Il faut compter
+1 à 2 jours de bout en bout. Vous pouvez éteindre votre PC pendant ce temps. L'installateur et
+le zip arrivent dans l'artefact `chromium` de l'exécution. Les 16 étapes sont générées par
+`scripts/gen-engine-workflow.sh`.
+
 ## Compiler sur Azure (versions publiées)
 
 Une machine Spot de 64 vCPU compile en ~2 h 30 pour ~1 €/h, au lieu d'une nuit sur un
