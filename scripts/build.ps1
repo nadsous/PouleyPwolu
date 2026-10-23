@@ -50,7 +50,9 @@ $started = Get-Date
 Push-Location $ucw
 try {
   do {
-    & python3 @pyArgs
+    # Passé par cmd : PowerShell 5.1 transforme sinon chaque ligne de stderr (la progression
+    # de curl, par exemple) en erreur, et $ErrorActionPreference = 'Stop' arrête tout.
+    cmd /c "python3 $($pyArgs -join ' ') 2>&1"
     $code = $LASTEXITCODE
     if ($code -eq 124) { Write-Host 'Pause de build.py après 3 h 30, reprise de la compilation…' }
   } while ($code -eq 124)

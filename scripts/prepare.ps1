@@ -6,7 +6,13 @@
 param([string]$Work = $(if ($env:POULEY_WORK) { $env:POULEY_WORK } else { 'C:\pw' }))
 $ErrorActionPreference = 'Stop'
 
-function Invoke-Git { & git.exe @args; if ($LASTEXITCODE) { throw "git $args a échoué ($LASTEXITCODE)" } }
+# git écrit sa progression sur stderr : on la laisse passer sans que PowerShell 5.1 la prenne
+# pour une erreur quand la sortie est redirigée (build.ps1 l'envoie dans un journal).
+function Invoke-Git {
+  $ErrorActionPreference = 'Continue'
+  & git.exe @args 2>&1 | ForEach-Object { "$_" }
+  if ($LASTEXITCODE) { throw "git $args a échoué ($LASTEXITCODE)" }
+}
 
 $root = Split-Path $PSScriptRoot -Parent
 $lock = Get-Content "$root\engine\source.lock.json" -Raw | ConvertFrom-Json
