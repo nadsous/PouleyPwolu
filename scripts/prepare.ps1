@@ -23,7 +23,9 @@ $root = Split-Path $PSScriptRoot -Parent
 $lock = Get-Content "$root\engine\source.lock.json" -Raw | ConvertFrom-Json
 $ucw = if ($Ucw) { $Ucw } else { Join-Path $Work 'ucw' }
 
-New-Item -ItemType Directory -Force (Split-Path $ucw) | Out-Null
+# Test-Path d'abord : New-Item refuse une racine de disque (C:\) même avec -Force.
+$parent = Split-Path $ucw
+if (-not (Test-Path $parent)) { New-Item -ItemType Directory -Force $parent | Out-Null }
 if (-not (Test-Path "$ucw\.git")) { Invoke-Git clone $lock.windows.repository $ucw }
 Invoke-Git -C $ucw fetch --tags origin
 # --force remet patches\series et flags.windows.gn d'origine si une préparation précédente les a modifiés.
