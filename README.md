@@ -48,6 +48,24 @@ Après un changement de patch, de réglage ou de version, le script demande `-Cl
 Le navigateur compilé est dans `C:\pw\ucw\build\src\out\Default\chrome.exe`,
 l'installateur et le zip dans `C:\pw\ucw\build`.
 
+## Compiler sur Azure (versions publiées)
+
+Une machine Spot de 64 vCPU compile en ~2 h 30 pour ~1 €/h, au lieu d'une nuit sur un
+portable. Il faut un abonnement Azure « Paiement à l'utilisation » (l'essai gratuit n'accepte
+pas les machines Spot) et `az login`.
+
+```powershell
+powershell -ExecutionPolicy Bypass -File cloud\azure\setup.ps1   # une fois : budget, quota, machine, outils
+powershell -ExecutionPolicy Bypass -File cloud\azure\build.ps1   # à chaque version
+```
+
+`setup.ps1` crée une alerte mail à 80 % de 30 €/mois, demande le quota Spot, crée le stockage
+et la machine, y installe Visual Studio et le reste, puis l'éteint. `build.ps1` envoie le dernier
+commit, allume la machine, compile sur son disque local rapide, rapatrie l'installateur et le zip
+dans `release\`, puis éteint la machine, y compris en cas d'erreur. Si Azure reprend la machine
+Spot en cours de route, la compilation est relancée. Machine éteinte, il ne reste à payer que
+son disque de 128 Go et son adresse IP, quelques euros par mois.
+
 ## Mesurer la mémoire
 
 ```powershell
