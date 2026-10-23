@@ -1,0 +1,3 @@
+# Réglages de compilation PouleyPwolu, ajoutés après flags.gn d'ungoogled-chromium
+# et flags.windows.gn. GN garde la dernière valeur : une clé répétée ici remplace
+# celle du dessus (ungoogled fait déjà ainsi pour chrome_pgo_phase).

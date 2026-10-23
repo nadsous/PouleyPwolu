@@ -1,0 +1,12 @@
+{
+  "chromium": "155.0.8059.84",
+  "windows": {
+    "repository": "https://github.com/ungoogled-software/ungoogled-chromium-windows.git",
+    "tag": "155.0.8059.84-1.1",
+    "commit": "9d0cd624438cd90148b38f34abcded048b6cd62c"
+  },
+  "ungoogled": {
+    "repository": "https://github.com/ungoogled-software/ungoogled-chromium.git",
+    "commit": "c7b4b99027bb6f9f33848fdbee8a319a3ba3b238"
+  }
+}

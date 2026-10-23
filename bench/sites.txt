@@ -1,0 +1,23 @@
+# Pages ouvertes par bench\ram.ps1, une par ligne. Pages publiques, sans connexion,
+# choisies pour représenter un usage courant : presse chargée en pubs, vidéo, réseaux,
+# outils, boutique. Ne change la liste qu'entre deux séries complètes de mesures.
+https://www.lemonde.fr/
+https://www.lefigaro.fr/
+https://www.20minutes.fr/
+https://www.ouest-france.fr/
+https://www.marmiton.org/
+https://www.allocine.fr/
+https://www.youtube.com/watch?v=aqz-KE-bpKQ
+https://www.twitch.tv/directory
+https://www.reddit.com/r/france/
+https://fr.wikipedia.org/wiki/Chromium_(navigateur_web)
+https://github.com/ungoogled-software/ungoogled-chromium
+https://stackoverflow.com/questions
+https://developer.mozilla.org/fr/docs/Web/JavaScript
+https://www.amazon.fr/
+https://www.leboncoin.fr/
+https://www.openstreetmap.org/
+https://www.bbc.com/news
+https://edition.cnn.com/
+https://www.theverge.com/
+https://news.ycombinator.com/
