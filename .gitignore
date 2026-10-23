@@ -7,3 +7,6 @@ release/
 .misogi/
 .claude/
 dev-app-update.yml
+
+# Moteur Chromium
+bench/results/

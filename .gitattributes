@@ -1,0 +1,5 @@
+# Les patches doivent garder leurs fins de ligne exactes, sinon ils ne s'appliquent plus.
+*.patch -text
+engine/patches/series text eol=lf
+*.gn text eol=lf
+*.ps1 text eol=crlf

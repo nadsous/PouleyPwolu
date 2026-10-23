@@ -30,6 +30,14 @@ Zéro télémétrie, bloqueur de traqueurs, poulaillers façon Arc, détecteur d
 - 🍗 **Plumes et tenders** : un compteur de productivité. Moins de tenders (TikTok, Twitch…), plus de plumes.
 - 🪶 **Léger** : les onglets inutilisés s'endorment, l'interface est en JavaScript natif, sans framework.
 
+> **En chantier : PouleyPwolu quitte Electron pour un vrai Chromium.** Le prochain PouleyPwolu
+> est construit sur [ungoogled-chromium](https://github.com/ungoogled-software/ungoogled-chromium),
+> avec les mêmes fonctions : toutes les extensions du Chrome Web Store, moins de mémoire,
+> puis macOS et Linux. Le moteur se prépare dans `engine/`, `scripts/*.ps1`, `bench/` et
+> `cloud/` : voir [docs/moteur-chromium.md](docs/moteur-chromium.md). La version Electron
+> actuelle reste celle qu'on télécharge jusqu'à la migration, qui se fera par une mise à jour
+> automatique.
+
 ## Captures d'écran
 
 <table>
