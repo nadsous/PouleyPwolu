@@ -6,18 +6,18 @@
 param([string]$Work = $(if ($env:POULEY_WORK) { $env:POULEY_WORK } else { 'C:\pw' }))
 $ErrorActionPreference = 'Stop'
 
-function Git { & git @args; if ($LASTEXITCODE) { throw "git $args a échoué ($LASTEXITCODE)" } }
+function Invoke-Git { & git.exe @args; if ($LASTEXITCODE) { throw "git $args a échoué ($LASTEXITCODE)" } }
 
 $root = Split-Path $PSScriptRoot -Parent
 $lock = Get-Content "$root\engine\source.lock.json" -Raw | ConvertFrom-Json
 $ucw = Join-Path $Work 'ucw'
 
 New-Item -ItemType Directory -Force $Work | Out-Null
-if (-not (Test-Path "$ucw\.git")) { Git clone $lock.windows.repository $ucw }
-Git -C $ucw fetch --tags origin
+if (-not (Test-Path "$ucw\.git")) { Invoke-Git clone $lock.windows.repository $ucw }
+Invoke-Git -C $ucw fetch --tags origin
 # --force remet patches\series et flags.windows.gn d'origine si une préparation précédente les a modifiés.
-Git -C $ucw checkout --force --quiet $lock.windows.commit
-Git -C $ucw submodule update --init --recursive --force
+Invoke-Git -C $ucw checkout --force --quiet $lock.windows.commit
+Invoke-Git -C $ucw submodule update --init --recursive --force
 
 $sub = (& git -C "$ucw\ungoogled-chromium" rev-parse HEAD).Trim()
 if ($sub -ne $lock.ungoogled.commit) { throw "ungoogled-chromium est à $sub, le verrou attend $($lock.ungoogled.commit)" }
