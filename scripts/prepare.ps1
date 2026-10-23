@@ -1,9 +1,14 @@
 ﻿# Récupère ungoogled-chromium-windows à la version figée dans engine\source.lock.json,
 # puis y ajoute les patches et réglages PouleyPwolu.
-#   powershell -File scripts\prepare.ps1 [-Work C:\pw]
+#   powershell -File scripts\prepare.ps1 [-Work C:\pw] [-Ucw C:\autre\dossier]
 # Le dossier de travail reste hors du dépôt : sources et compilation y pèsent ~100 Go.
 # Garde-le court (C:\pw) : les chemins de Chromium frôlent les limites de Windows.
-param([string]$Work = $(if ($env:POULEY_WORK) { $env:POULEY_WORK } else { 'C:\pw' }))
+# -Ucw place ungoogled-chromium-windows ailleurs que dans $Work\ucw (la CI GitHub l'attend
+# dans C:\ungoogled-chromium-windows).
+param(
+  [string]$Work = $(if ($env:POULEY_WORK) { $env:POULEY_WORK } else { 'C:\pw' }),
+  [string]$Ucw
+)
 $ErrorActionPreference = 'Stop'
 
 # git écrit sa progression sur stderr : on la laisse passer sans que PowerShell 5.1 la prenne
@@ -16,9 +21,9 @@ function Invoke-Git {
 
 $root = Split-Path $PSScriptRoot -Parent
 $lock = Get-Content "$root\engine\source.lock.json" -Raw | ConvertFrom-Json
-$ucw = Join-Path $Work 'ucw'
+$ucw = if ($Ucw) { $Ucw } else { Join-Path $Work 'ucw' }
 
-New-Item -ItemType Directory -Force $Work | Out-Null
+New-Item -ItemType Directory -Force (Split-Path $ucw) | Out-Null
 if (-not (Test-Path "$ucw\.git")) { Invoke-Git clone $lock.windows.repository $ucw }
 Invoke-Git -C $ucw fetch --tags origin
 # --force remet patches\series et flags.windows.gn d'origine si une préparation précédente les a modifiés.
