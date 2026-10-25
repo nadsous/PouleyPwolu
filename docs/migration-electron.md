@@ -13,7 +13,8 @@
    (`%LOCALAPPDATA%\Programs\PouleyPwolu\Uninstall PouleyPwolu.exe /S`, qui ne touche pas aux
    données). Il installe Chromium et garde les ProgIds `PouleyPwoluURL` et `PouleyPwoluHTML`,
    pour rester le navigateur par défaut.
-6. Au premier démarrage, Chromium importe le dossier, puis efface `mots-de-passe.bin`.
+6. Au premier démarrage, Chromium importe le dossier, puis efface `mots-de-passe.bin`. Les
+   mots de passe ne sont jamais écrits en clair sur le disque.
 
 Le code se trouve dans `src/main/engine-switch.js`.
 
@@ -89,7 +90,8 @@ Seules les adresses `http(s)` sont gardées. Les onglets éphémères ne sont pa
 Un patch lit le dossier au démarrage du profil :
 
 1. `CryptUnprotectData` sur la clé, puis déchiffrement en mémoire.
-2. Import du CSV avec `password_manager::PasswordImporter`, en écrivant le CSV déchiffré dans
-   un fichier temporaire supprimé juste après.
+2. Import du CSV avec `password_manager::PasswordImporter::Import(std::string csv_data, …)`
+   (Chromium 155). Le CSV déchiffré reste en mémoire et n'est jamais écrit en clair sur le
+   disque.
 3. Création des espaces et des onglets.
 4. Effacement de `mots-de-passe.bin` et `cle.dpapi`.
