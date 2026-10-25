@@ -1726,6 +1726,28 @@
     if (overlay === 'settings') renderSettingsBody();
   });
 
+  // Passage au moteur Chromium (dernière version Electron). Le coffre doit être ouvert
+  // une fois pour que les mots de passe suivent.
+  async function engineSwitch() {
+    const r = await api.cmd('engine.switch');
+    if (r && r.need === 'vault') openVault({ then: () => engineSwitch() });
+  }
+  let engineOffered = null;
+  api.on('engine', (e) => {
+    const tid = 'engine';
+    if (e.stage === 'offer' && engineOffered !== e.version) {
+      engineOffered = e.version;
+      cluck('oeuf');
+      toast('PouleyPwolu ' + e.version + ' change de moteur : un vrai Chromium, compatible avec toutes les extensions du Chrome Web Store. Onglets, favoris, poulaillers et mots de passe suivent ; il faudra seulement te reconnecter aux sites.', {
+        id: tid, title: 'Nouveau moteur', timeout: 0,
+        action: { label: 'Passer au nouveau moteur', run: () => engineSwitch() },
+      });
+    } else if (e.stage === 'export') toast('Copie de tes onglets, favoris et mots de passe…', { id: tid, title: 'Nouveau moteur', timeout: 0 });
+    else if (e.stage === 'download') toast('Téléchargement du nouveau PouleyPwolu…', { id: tid, title: 'Nouveau moteur', timeout: 0, progress: e.progress || 0 });
+    else if (e.stage === 'install') toast('Installation : PouleyPwolu va redémarrer.', { id: tid, title: 'Nouveau moteur', timeout: 0 });
+    else if (e.stage === 'error') toast(e.error, { id: tid, title: 'Passage interrompu', alert: true, timeout: 0, action: { label: 'Réessayer', run: () => engineSwitch() } });
+  });
+
 
   // ───────────────────────────────────────────── coffre à mots de passe
   // L'interface ne garde aucun mot de passe : elle les demande au processus

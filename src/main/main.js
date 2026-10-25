@@ -24,6 +24,7 @@ const { SessionKeep } = require('./session-keep');
 const focus = require('./focus');
 const aiDetect = require('./ai-detect');
 const { createExtHost } = require('./ext-host');
+const { EngineSwitch } = require('./engine-switch');
 
 const ROOT = path.join(__dirname, '..', '..');
 const PAGE_PRELOAD = path.join(__dirname, '..', 'preload', 'page.js');
@@ -133,6 +134,7 @@ const allSessions = new Set();
 let sessionKeep = null;
 let closingApp = false; // fenêtre en train de se fermer : les pages disparaissent, pas les onglets
 let extHost = null; // extensions du Chrome Web Store (ext-host.js)
+let engineSwitch = null; // passage au moteur Chromium (engine-switch.js)
 
 function extEnabled(e) { return e.available && store && store.state.settings[e.setting] !== false; }
 
@@ -2420,6 +2422,29 @@ function setupUpdater() {
   updater.on('update-downloaded', (info) => setUpdate({ status: 'ready', version: info.version, progress: 100 }));
   updater.on('error', (err) => setUpdate({ status: 'error', error: String((err && err.message) || err).split('\n')[0].slice(0, 160) }));
 }
+// Passage au moteur Chromium : proposé dès qu'une version Chromium est publiée.
+// Même réglage que les mises à jour : rien n'est vérifié s'il est coupé.
+function setupEngineSwitch() {
+  if (!app.isPackaged && !process.env.POULEY_ENGINE_TEST) return;
+  engineSwitch = new EngineSwitch({
+    getState: () => store.state,
+    getVault: () => vault,
+    listExtensions: () => [
+      ...EXTENSIONS.map((e) => ({ id: e.key, name: e.name, builtin: true, enabled: extEnabled(e) })),
+      ...(extHost ? extHost.list().map((e) => ({ id: e.id, name: e.name, enabled: e.enabled !== false })) : []),
+    ],
+    send: (p) => sendUi('engine', p),
+    beforeQuit: async () => {
+      // Une mise à jour Electron déjà téléchargée ne doit pas s'installer par-dessus.
+      if (updater) updater.autoInstallOnAppQuit = false;
+      store.flush();
+    },
+  });
+  const check = () => { if (S().autoUpdate !== false) engineSwitch.check(); };
+  setTimeout(check, 20000);
+  setInterval(check, 6 * 3600000);
+}
+
 function checkUpdates(manual) {
   if (!updater) return updateState;
   if (!manual && S().autoUpdate === false) return updateState;
@@ -2997,6 +3022,8 @@ const commands = {
 
   'tab.float': (id) => toggleFloat(id || currentTabId),
   'update.check': () => checkUpdates(true),
+  'engine.status': () => (engineSwitch ? engineSwitch.status() : { available: false }),
+  'engine.switch': () => (engineSwitch ? engineSwitch.run() : { error: 'Indisponible.' }),
   'update.install': () => { if (updater && updateState.status === 'ready') { store.flush(); updater.quitAndInstall(true, true); } },
   'memory.report': () => memoryReport(),
   'memory.free': () => {
@@ -3360,6 +3387,7 @@ app.whenReady().then(() => {
     setTimeout(extUpdates, 90000);
     setInterval(extUpdates, 24 * 3600000);
     setInterval(() => checkUpdates(false), 6 * 3600000);
+    setupEngineSwitch();
   });
   setInterval(housekeeping, 60000);
   if (process.platform === 'darwin' && app.dock) app.dock.setIcon(nativeImage.createFromPath(path.join(ROOT, 'build', 'icon.png')));
