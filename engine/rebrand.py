@@ -5,7 +5,9 @@ Lancé après les patches (build.py, via scripts/prepare.ps1) ou à la main :
 
 1. Icônes : engine/branding/fichiers/ est copié par-dessus les sources (fichiers binaires,
    que les patches quilt ne savent pas transporter).
-2. Textes : « Chromium » devient « PouleyPwolu » dans les messages de l'interface. Chaque
+2. Extension intégrée : engine/extension/ est copiée dans chrome/browser/resources/pouley/
+   extension, que le patch extension-integree.patch installe à côté du navigateur.
+3. Textes : « Chromium » devient « PouleyPwolu » dans les messages de l'interface. Chaque
    traduction (.xtb) est retrouvée par une empreinte calculée sur le texte anglais : on
    recalcule ces empreintes avec grit, sinon toutes les langues retomberaient sur l'anglais.
    « The Chromium Authors » (droits d'auteur) et « Chromium OS » ne changent pas.
@@ -46,6 +48,15 @@ def copy_icons(src):
             shutil.copyfile(f, to)
             n += 1
     return n
+
+
+def copy_extension(src):
+    """engine/extension -> chrome/browser/resources/pouley/extension (extension intégrée)."""
+    to = src / 'chrome' / 'browser' / 'resources' / 'pouley' / 'extension'
+    if to.exists():
+        shutil.rmtree(to)
+    shutil.copytree(HERE / 'extension', to)
+    return sum(1 for f in to.rglob('*') if f.is_file())
 
 
 def message_ids(grd):
@@ -94,6 +105,7 @@ def main():
     src = Path(sys.argv[1]).resolve()
     sys.path.insert(0, str(src / 'tools' / 'grit'))
     print(f'Icônes : {copy_icons(src)} fichier(s)')
+    print(f'Extension intégrée : {copy_extension(src)} fichier(s)')
     for rel in GRDS:
         msgs, xtbs = rebrand_grd(src, rel)
         print(f'{rel} : {msgs} message(s) renommé(s), {xtbs} langue(s)')

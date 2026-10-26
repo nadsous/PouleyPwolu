@@ -3,3 +3,5 @@
 # Les lignes vides et celles qui commencent par # sont ignorées.
 identite.patch
 migration-mots-de-passe.patch
+extension-integree.patch
+barre-laterale.patch

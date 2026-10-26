@@ -1,0 +1,132 @@
+diff --git a/chrome/BUILD.gn b/chrome/BUILD.gn
+index a8c5e1456e..f5cf233e53 100644
+--- a/chrome/BUILD.gn
++++ b/chrome/BUILD.gn
+@@ -128,7 +128,7 @@ if (!is_android && !is_mac) {
+       "//printing/buildflags",
+     ]
+     data = [ "$root_out_dir/resources.pak" ]
+-    data_deps = []
++    data_deps = [ "//chrome/browser/resources/pouley:extension" ]
+ 
+     if (is_win || is_linux || is_chromeos) {
+       deps += [ "//components/webapps/isolated_web_apps:scheme" ]
+diff --git a/chrome/browser/extensions/component_loader.cc b/chrome/browser/extensions/component_loader.cc
+index 2be294fdde..fc7b0b65e1 100644
+--- a/chrome/browser/extensions/component_loader.cc
++++ b/chrome/browser/extensions/component_loader.cc
+@@ -743,6 +743,22 @@ void ComponentLoader::AddDefaultComponentExtensionsWithBackgroundPages(
+     return;
+   }
+ 
++  // PouleyPwolu : extension intégrée (barre latérale, poulaillers, bouclier,
++  // inspecteur…), copiée dans resources/pouley. Pour les essais,
++  // --pouley-extension-dir=<dossier> charge directement les sources.
++  if (!skip_session_components) {
++    base::FilePath pouley_dir =
++        command_line->GetSwitchValuePath("pouley-extension-dir");
++    if (pouley_dir.empty()) {
++      CHECK(base::PathService::Get(chrome::DIR_RESOURCES, &pouley_dir));
++      pouley_dir = pouley_dir.AppendASCII("pouley");
++    }
++    // Lecture d'un seul petit manifest.json au démarrage (comme
++    // --load-component-extension). Identifiant fixé par la clé du manifeste :
++    // dhjkdmdnmjmglljdpbfclbpgphfnapck.
++    AddOrReplace(pouley_dir);
++  }
++
+   if (!skip_session_components) {
+ #if BUILDFLAG(IS_CHROMEOS)
+     Add(IDR_ECHO_MANIFEST,
+diff --git a/chrome/browser/resources/pouley/BUILD.gn b/chrome/browser/resources/pouley/BUILD.gn
+new file mode 100644
+index 0000000000..ce228d07f5
+--- /dev/null
++++ b/chrome/browser/resources/pouley/BUILD.gn
+@@ -0,0 +1,20 @@
++# Copyright 2026 PouleyPwolu
++# Use of this source code is governed by a BSD-style license that can be
++# found in the LICENSE file.
++
++# Extension intégrée PouleyPwolu : copiée dans resources/pouley à côté de
++# chrome.dll, puis chargée comme composant (component_loader.cc).
++# Ses sources (engine/extension du dépôt PouleyPwolu) sont copiées dans
++# extension/ par engine/rebrand.py.
++action("extension") {
++  script = "copy_extension.py"
++  inputs = [ "extension/manifest.json" ]
++  outputs = [ "$root_out_dir/resources/pouley/manifest.json" ]
++  depfile = "$target_gen_dir/extension.d"
++  args = [
++    rebase_path("extension", root_build_dir),
++    rebase_path("$root_out_dir/resources/pouley", root_build_dir),
++    rebase_path(depfile, root_build_dir),
++    rebase_path(outputs[0], root_build_dir),
++  ]
++}
+diff --git a/chrome/browser/resources/pouley/copy_extension.py b/chrome/browser/resources/pouley/copy_extension.py
+new file mode 100644
+index 0000000000..0b92e23dae
+--- /dev/null
++++ b/chrome/browser/resources/pouley/copy_extension.py
+@@ -0,0 +1,38 @@
++# Copyright 2026 PouleyPwolu
++# Use of this source code is governed by a BSD-style license that can be
++# found in the LICENSE file.
++"""Copie l'extension intégrée PouleyPwolu dans le dossier de sortie.
++
++copy_extension.py <source> <destination> <depfile> <sortie principale>
++Le depfile liste tous les fichiers copiés : ninja recopie dès que l'un change.
++"""
++import os
++import shutil
++import sys
++
++# Sous-dossiers prévus dans chrome/installer/mini_installer/chrome.release.
++ALLOWED = {'', 'icons', 'sidebar', 'content', 'pages', 'lib', 'data'}
++
++
++def main():
++    src, dst, depfile, output = sys.argv[1:5]
++    if os.path.isdir(dst):
++        shutil.rmtree(dst)
++    inputs = []
++    for root, _dirs, files in os.walk(src):
++        rel = os.path.relpath(root, src)
++        rel = '' if rel == '.' else rel.replace(os.sep, '/')
++        if files and rel not in ALLOWED:
++            sys.exit('copy_extension.py : sous-dossier %r absent de chrome.release' % rel)
++        os.makedirs(os.path.join(dst, rel), exist_ok=True)
++        for f in files:
++            shutil.copyfile(os.path.join(root, f), os.path.join(dst, rel, f))
++            inputs.append(os.path.join(root, f).replace(os.sep, '/'))
++    # Format Makefile : une espace dans un chemin s'écrit « \ ».
++    os.makedirs(os.path.dirname(depfile), exist_ok=True)
++    with open(depfile, 'w', encoding='utf-8') as d:
++        d.write('%s: %s\n' % (output.replace(os.sep, '/'), ' '.join(i.replace(' ', '\\ ') for i in inputs)))
++
++
++if __name__ == '__main__':
++    main()
+diff --git a/chrome/installer/mini_installer/chrome.release b/chrome/installer/mini_installer/chrome.release
+index 037b80488c..95255ba67a 100644
+--- a/chrome/installer/mini_installer/chrome.release
++++ b/chrome/installer/mini_installer/chrome.release
+@@ -42,6 +42,17 @@ v8_context_snapshot.bin: %(VersionDir)s\
+ # Sub directories living in the version dir
+ #
+ Extensions\*.*: %(VersionDir)s\Extensions\
++#
++# PouleyPwolu : extension intégrée (un sous-dossier par ligne, voir
++# chrome/browser/resources/pouley/copy_extension.py).
++#
++resources\pouley\*.*: %(VersionDir)s\resources\pouley\
++resources\pouley\icons\*.*: %(VersionDir)s\resources\pouley\icons\
++resources\pouley\sidebar\*.*: %(VersionDir)s\resources\pouley\sidebar\
++resources\pouley\content\*.*: %(VersionDir)s\resources\pouley\content\
++resources\pouley\pages\*.*: %(VersionDir)s\resources\pouley\pages\
++resources\pouley\lib\*.*: %(VersionDir)s\resources\pouley\lib\
++resources\pouley\data\*.*: %(VersionDir)s\resources\pouley\data\
+ locales\*.pak: %(VersionDir)s\Locales
+ 
+ #

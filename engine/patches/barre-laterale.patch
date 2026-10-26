@@ -1,0 +1,40 @@
+diff --git a/chrome/browser/extensions/api/side_panel/side_panel_api.cc b/chrome/browser/extensions/api/side_panel/side_panel_api.cc
+index 99e9cc39ad..e5fc821924 100644
+--- a/chrome/browser/extensions/api/side_panel/side_panel_api.cc
++++ b/chrome/browser/extensions/api/side_panel/side_panel_api.cc
+@@ -12,6 +12,8 @@
+ #include "chrome/browser/extensions/chrome_extension_function_details.h"
+ #include "chrome/browser/extensions/extension_tab_util.h"
+ #include "chrome/common/extensions/api/side_panel.h"
++#include "extensions/common/extension.h"
++#include "extensions/common/manifest.h"
+ 
+ namespace extensions {
+ 
+@@ -73,7 +75,10 @@ ExtensionFunction::ResponseAction SidePanelOpenFunction::RunFunction() {
+   EXTENSION_FUNCTION_VALIDATE(extension());
+ 
+   // `sidePanel.open()` requires a user gesture.
+-  if (!user_gesture()) {
++  // PouleyPwolu : sauf pour les extensions intégrées au navigateur, qui ouvrent
++  // la barre latérale (poulaillers, onglets) dans chaque nouvelle fenêtre.
++  if (!user_gesture() &&
++      !Manifest::IsComponentLocation(extension()->location())) {
+     return RespondNow(
+         Error("`sidePanel.open()` may only be called in "
+               "response to a user gesture."));
+diff --git a/chrome/browser/ui/side_panel/side_panel_prefs.cc b/chrome/browser/ui/side_panel/side_panel_prefs.cc
+index dbb54fb99f..bbbf6ef8e2 100644
+--- a/chrome/browser/ui/side_panel/side_panel_prefs.cc
++++ b/chrome/browser/ui/side_panel/side_panel_prefs.cc
+@@ -34,8 +34,9 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
+   // Otherwise, the side panel should default to the right side of the screen.
+   // TODO(dljames): Add enum values kAlternateSide / kDefaultSide that will
+   // replace false and true respectively.
++  // PouleyPwolu : à gauche par défaut, comme la barre des poulaillers.
+   registry->RegisterBooleanPref(prefs::kSidePanelHorizontalAlignment,
+-                                !base::i18n::IsRTL());
++                                base::i18n::IsRTL());
+   registry->RegisterBooleanPref(prefs::kGoogleSearchSidePanelEnabled, true);
+   registry->RegisterDictionaryPref(prefs::kSidePanelIdToWidth);
+ 

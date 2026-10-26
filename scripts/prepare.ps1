@@ -61,6 +61,7 @@ if (Test-Path $rb) { Remove-Item $rb -Recurse -Force }
 New-Item -ItemType Directory -Force $rb | Out-Null
 Copy-Item "$root\engine\rebrand.py" $rb
 Copy-Item "$root\engine\branding" "$rb\branding" -Recurse
+Copy-Item "$root\engine\extension" "$rb\extension" -Recurse
 $buildPy = "$ucw\build.py"
 $py = [IO.File]::ReadAllText($buildPy)
 $anchor = "            None`n        )`n"

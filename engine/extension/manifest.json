@@ -1,0 +1,13 @@
+{
+  "manifest_version": 3,
+  "name": "PouleyPwolu",
+  "version": "1.0.0",
+  "description": "Poulaillers, bouclier, inspecteur, détecteur d'IA, stylo, plumes et tenders.",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAtr6lQKzMsHYnn0edYLdvx4A8PbUfU8FP+bwC4xzCkl963aSH5DwMgZaJRvx22av/TTUKLodo8hnzCwjBGPezdZzf3T8Y8/Ndzl5hcg8Q5O3XX7ZtQeC5ZaLQ6AuNeJeoXuwXw7pmm3voBYhVgLjFbjkVbyvtViuMuyGAcxUR/wIEO78ErRuKO89nwNTttnk5A9Ckxjc88xK9IAOwx9AP7bal3AwgSBWIru4XNiQ8F7xaUuj+3SckIsKzwpYWF26eniM/Oeu+lqtaweWPQhw0eMGYv2hShDoanyr6IHjfp1SU/dhlZn7by+XRS1dA0q930bnxxoJPXpsZdfWxgi5YSwIDAQAB",
+  "background": { "service_worker": "background.js", "type": "module" },
+  "side_panel": { "default_path": "sidebar/sidebar.html" },
+  "action": { "default_title": "PouleyPwolu" },
+  "permissions": ["sidePanel", "tabs", "tabGroups", "storage", "unlimitedStorage", "declarativeNetRequest", "privacy", "scripting", "webNavigation", "alarms", "contextMenus", "favicon"],
+  "host_permissions": ["<all_urls>"],
+  "icons": { "16": "icons/16.png", "48": "icons/48.png", "128": "icons/128.png" }
+}
