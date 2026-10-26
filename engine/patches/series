@@ -8,3 +8,6 @@ barre-laterale.patch
 interface.patch
 fenetre-sans-titre.patch
 store.patch
+passage-electron.patch
+extensions-barre.patch
+telechargements.patch

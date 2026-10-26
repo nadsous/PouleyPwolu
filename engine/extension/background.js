@@ -2,6 +2,10 @@
 // (engine/patches/extension-integree.patch). Elle ne peut pas être désinstallée.
 // Le cœur (core/main.js) reprend la logique de la version Electron.
 import './core/main.js';
+import './core/inspect.js';
+import './core/system.js';
+import './core/tools.js';
+import './core/features.js';
 
 // La barre PouleyPwolu remplace la barre d'onglets : elle s'ouvre dans chaque fenêtre
 // normale (le moteur l'autorise sans clic pour l'extension intégrée).

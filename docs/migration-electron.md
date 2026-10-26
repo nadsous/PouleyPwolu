@@ -9,12 +9,21 @@
 3. Si un coffre existe, la personne l'ouvre une fois (Windows Hello ou mot de passe maître).
 4. La 0.1.12 écrit le dossier de migration, télécharge l'installateur Chromium, vérifie son
    empreinte, le lance avec `/S --migration=<dossier>` et se ferme.
-5. L'installateur attend la fermeture de `PouleyPwolu.exe` et désinstalle la version Electron
-   (`%LOCALAPPDATA%\Programs\PouleyPwolu\Uninstall PouleyPwolu.exe /S`, qui ne touche pas aux
-   données). Il installe Chromium et garde les ProgIds `PouleyPwoluURL` et `PouleyPwoluHTML`,
-   pour rester le navigateur par défaut.
-6. Au premier démarrage, Chromium importe le dossier, puis efface `mots-de-passe.bin`. Les
-   mots de passe ne sont jamais écrits en clair sur le disque.
+5. L'installateur de Chromium (mini_installer, sans questions) installe la nouvelle version et
+   la lance. Les arguments `/S --migration=…` lui sont indifférents.
+6. Au premier démarrage, Chromium :
+   - importe les mots de passe, puis efface `mots-de-passe.bin`
+     (`chrome/browser/password_manager/pouley_migration.cc`). Ils ne sont jamais écrits en
+     clair sur le disque ;
+   - fait pointer les ProgIds `PouleyPwoluURL` et `PouleyPwoluHTML` et
+     `StartMenuInternet\PouleyPwolu` vers son exécutable : le choix « navigateur par défaut »
+     de Windows reste valable ;
+   - désinstalle la version Electron (`Uninstall PouleyPwolu.exe /S --updated` : `--updated`
+     garde ces inscriptions, les données restent), une seule fois (fichier `electron-retire`).
+7. L'extension intégrée lit l'état (`chrome.pouleyPrivate.getMigrationState`), reprend
+   poulaillers, onglets, favoris et réglages, puis efface `etat.bin`
+   (`engine/extension/core/migration.js`). Les extensions du Chrome Web Store de l'ancienne
+   version s'ouvrent dans des onglets, pour les réinstaller.
 
 Le code se trouve dans `src/main/engine-switch.js`.
 

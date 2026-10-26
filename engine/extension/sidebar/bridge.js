@@ -2,7 +2,12 @@
 // Même API que src/preload/ui.js de la version Electron : app.js ne change pas.
 (() => {
   // index.html?page=<écran> : page en pleine fenêtre (réglages, archive…), sans la barre.
-  if (new URLSearchParams(location.search).get('page')) document.body.classList.add('page-mode');
+  // index.html?panel=<panneau> : panneau posé sur une page web (inspecteur, détecteur d'IA).
+  const query = new URLSearchParams(location.search);
+  if (query.get('page')) document.body.classList.add('page-mode');
+  if (query.get('panel')) document.body.classList.add('panel-mode', 'panel-' + query.get('panel'));
+  // Les annonces (bulles, alertes) s'affichent dans la barre, pas une deuxième fois ici.
+  const BAR_ONLY = (query.get('page') || query.get('panel')) ? new Set(['toast', 'privacy:alert', 'cluck', 'download', 'shot:done', 'clipboard-image', 'save-image']) : new Set();
 
   const listeners = new Map(); // canal -> Set(fn)
   const pending = new Map(); // id -> { resolve, reject }
@@ -18,7 +23,7 @@
         pending.delete(msg.id);
         if (msg.error) console.warn('[PouleyPwolu]', msg.error);
         p.resolve(msg.result);
-      } else if (msg.type === 'event') {
+      } else if (msg.type === 'event' && !BAR_ONLY.has(msg.channel)) {
         for (const fn of listeners.get(msg.channel) || []) {
           try { fn(msg.payload); } catch (err) { console.error('[PouleyPwolu]', msg.channel, err); }
         }

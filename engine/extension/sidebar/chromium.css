@@ -31,3 +31,18 @@ body.page-mode .overlay { position: fixed; inset: 0; }
 .pw-menu .check { width: 12px; flex: none; text-align: center; }
 .pw-menu .sub { margin-left: auto; color: var(--muted, #8a8a96); font-size: 11px; }
 .pw-menu hr { border: 0; border-top: 1px solid var(--line, #26262c); margin: 4px 2px; }
+
+/* Panneau posé sur une page web (index.html?panel=…, core/inspect.js) : l'inspecteur
+   remplit le cadre ; la fenêtre du détecteur d'IA s'affiche sur un fond transparent. */
+html:has(body.panel-mode), body.panel-mode { background: transparent !important; }
+body.panel-mode #sidebar,
+body.panel-mode #content,
+body.panel-mode #ai-panel,
+body.panel-mode #banners,
+body.panel-mode #findbar { display: none !important; }
+body.chromium.panel-inspector #app { display: flex; height: 100vh; }
+body.chromium.panel-inspector #main { display: flex !important; padding: 0; height: 100vh; }
+body.panel-inspector #workspace { height: 100%; }
+body.panel-inspector #inspector { flex: 1; width: auto; height: 100%; border-radius: 12px; animation: none; }
+body.panel-aid #main { display: none !important; }
+body.panel-aid .overlay { position: fixed; inset: 0; }

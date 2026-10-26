@@ -11,6 +11,7 @@ import * as focus from './focus.js';
 import { siteOf } from '../lib/trackers.js';
 import { applyShield } from '../lib/shield.js';
 import * as ext from './extensions.js';
+import { importMigration } from './migration.js';
 
 const { SEARCH_ENGINES, AI_PROVIDERS, fill, keywordSearch } = self.PouleyConfig;
 const { normalize } = self.PouleyIcons;
@@ -390,7 +391,7 @@ const MEMORY_MODES = {
 const memoryMode = () => MEMORY_MODES[S().memoryMode] || MEMORY_MODES.equilibre;
 
 function canSleep(id, rt) {
-  return rt.chromeId != null && id !== currentTabId && !rt.audible;
+  return rt.chromeId != null && id !== currentTabId && !rt.audible && !rt.floating;
 }
 
 function enforceAwakeLimit() {
@@ -585,6 +586,16 @@ export function sendUi(channel, payload) {
   }
 }
 
+// Une seule barre (la première fenêtre) : pour les tâches à ne faire qu'une fois.
+export function sendBar(channel, payload) {
+  for (const port of ports) {
+    if (/\/sidebar\/index\.html$/.test(port.sender.url || '')) {
+      try { port.postMessage({ type: 'event', channel, payload }); return true; } catch {}
+    }
+  }
+  return false;
+}
+
 function scheduleBroadcast() {
   if (broadcastTimer) return;
   broadcastTimer = setTimeout(() => {
@@ -599,7 +610,7 @@ function snapshot() {
     rt[id] = {
       loading: r.loading, canGoBack: r.canGoBack, canGoForward: r.canGoForward, blocked: r.blocked || 0,
       audible: r.audible, muted: r.muted, awake: r.chromeId != null, https: r.https ?? null,
-      zoom: r.zoom || 1, floating: false, badge: 0, memMb: 0, pen: !!r.penOn, agent: null,
+      zoom: r.zoom || 1, floating: !!r.floating, badge: 0, memMb: r.memMb || 0, pen: !!r.penOn, agent: null,
     };
   }
   const cur = currentTabId && findTab(currentTabId);
@@ -625,11 +636,15 @@ function snapshot() {
     vault: { exists: false, open: false },
     userExtensions: userExtensions,
     security: { stateEncrypted: false, cookies: true, bitlocker: null },
+    ...snapshotExtra,
   };
 }
+// Champs ajoutés par les autres modules du cœur (mises à jour, panneaux…).
+export const snapshotExtra = {};
 
 // Menus contextuels : construits ici comme dans main.js, dessinés par la barre.
 const menus = new Map();
+let callerPort = null; // port de l'écran dont la commande est en cours (partie synchrone)
 function popupMenu(template) {
   const menuId = uid('m');
   const handlers = new Map();
@@ -642,7 +657,9 @@ function popupMenu(template) {
   const items = serialize(template);
   menus.clear();
   menus.set(menuId, handlers);
-  sendUi('menu', { menuId, items });
+  // Seul l'écran qui a demandé le menu le dessine (la barre, une page, un panneau).
+  const port = callerPort;
+  if (port) { try { port.postMessage({ type: 'event', channel: 'menu', payload: { menuId, items } }); } catch {} } else sendUi('menu', { menuId, items });
 }
 
 const validColor = (c) => (typeof c === 'string' && /^#[0-9a-f]{6}$/i.test(c) ? c.toUpperCase() : null);
@@ -879,6 +896,13 @@ export const commands = {
   capture: () => null,
   // Grand écran demandé par la barre : une page en pleine fenêtre, réutilisée si elle est
   // déjà ouverte.
+  // Questions rapides : la réponse s'ouvre dans un onglet.
+  'ai.ask': (prompt) => openTab({ url: askUrl(String(prompt || '')) }),
+  'ai.askPage': () => {
+    const f = currentTabId && findTab(currentTabId);
+    const url = f && /^https?:/.test(f.rec.url) ? f.rec.url : null;
+    openTab({ url: askUrl(url ? `Résume et analyse cette page en français : ${url}` : '') });
+  },
   'ui.page': ({ name, arg } = {}) => {
     const page = UI_PAGES[name];
     if (!page) return;
@@ -974,6 +998,8 @@ chrome.tabs.onActivated.addListener(async ({ tabId }) => {
   await ready;
   const recId = byChrome.get(tabId);
   if (!recId || recId === currentTabId) return;
+  // Onglet flottant : il vit dans sa petite fenêtre, la barre garde l'onglet affiché.
+  if (runtime.get(recId)?.floating) return;
   const f = findTab(recId);
   if (!f) return;
   currentTabId = recId;
@@ -1019,18 +1045,15 @@ export async function applyPrivacy() {
   await chrome.privacy.websites.thirdPartyCookiesAllowed.set({ value: !s.blockThirdPartyCookies }).catch(() => {});
 }
 
-// Traqueurs bloqués par onglet (compteur du bouclier).
-chrome.declarativeNetRequest.onRuleMatchedDebug?.addListener((m) => {
-  const recId = byChrome.get(m.request.tabId);
-  const rt = recId && runtime.get(recId);
-  if (rt && m.rule.ruleId >= 1000) { rt.blocked = (rt.blocked || 0) + 1; scheduleBroadcast(); }
-});
+// Traqueurs bloqués par onglet (compteur du bouclier) : core/inspect.js.
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Démarrage : état, liens avec les onglets Chromium déjà ouverts
 
 async function start() {
   await store.load();
+  // Premier démarrage après la version Electron : ses poulaillers et favoris arrivent.
+  const oldExtensions = await importMigration(store).catch((err) => { console.error('[migration]', err); return null; });
   const sess = await chrome.storage.session.get(['bindings', 'currentTabId', 'mainWindowId']);
   const open = new Map((await chrome.tabs.query({})).map((t) => [t.id, t]));
   // Le service worker a été mis en sommeil : on retrouve les liens.
@@ -1063,6 +1086,14 @@ async function start() {
   }
   await applyPrivacy();
   await refreshExtensions();
+  if (oldExtensions) {
+    setTimeout(() => sendUi('toast', { text: 'Tes poulaillers, onglets et favoris sont arrivés de l’ancienne version.' }), 1500);
+    // Extensions de l'ancienne version : leur page du Chrome Web Store, pour les réinstaller.
+    if (oldExtensions.length) {
+      const p = activePoulailler();
+      for (const e of oldExtensions) openTab({ url: 'https://chromewebstore.google.com/detail/' + e.id, background: true, poulaillerId: p.id });
+    }
+  }
   chrome.alarms.create('pouley-menage', { periodInMinutes: 1 });
   chrome.alarms.create('pouley-extensions', { periodInMinutes: 24 * 60, delayInMinutes: 2 });
   chrome.alarms.create('pouley-focus', { periodInMinutes: 0.25 });
@@ -1113,11 +1144,16 @@ chrome.runtime.onConnect.addListener((port) => {
     let error = null;
     if (!fn) console.warn('[commande inconnue]', msg.name);
     else {
-      try { result = await fn(msg.arg); } catch (err) { error = String(err && err.message || err); console.error('[commande]', msg.name, err); }
+      try {
+        callerPort = port;
+        const pending = fn(msg.arg);
+        callerPort = null;
+        result = await pending;
+      } catch (err) { callerPort = null; error = String(err && err.message || err); console.error('[commande]', msg.name, err); }
     }
     try { port.postMessage({ type: 'reply', id: msg.id, result: result ?? null, error }); } catch {}
   });
 });
 
-export { openTab, activateTab, closeTab, findTab, activePoulailler, scheduleBroadcast, popupMenu, runtime, byChrome };
+export { openTab, activateTab, closeTab, findTab, activePoulailler, scheduleBroadcast, popupMenu, runtime, byChrome, ensureView, mainWindow, destroyView };
 export const current = () => currentTabId;

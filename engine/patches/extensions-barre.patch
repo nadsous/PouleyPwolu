@@ -1,0 +1,901 @@
+diff --git a/chrome/browser/extensions/api/pouley_private/pouley_private_api.cc b/chrome/browser/extensions/api/pouley_private/pouley_private_api.cc
+new file mode 100644
+index 0000000000..974e247944
+--- /dev/null
++++ b/chrome/browser/extensions/api/pouley_private/pouley_private_api.cc
+@@ -0,0 +1,130 @@
++// Copyright 2026 PouleyPwolu
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#include "chrome/browser/extensions/api/pouley_private/pouley_private_api.h"
++
++#include <optional>
++#include <string>
++
++#include "base/functional/bind.h"
++#include "base/task/thread_pool.h"
++#include "build/build_config.h"
++#include "chrome/browser/extensions/chrome_extension_function_details.h"
++#include "chrome/browser/extensions/extension_tab_util.h"
++#include "chrome/browser/extensions/pouley_dock.h"
++#include "chrome/browser/extensions/window_controller.h"
++#include "chrome/common/extensions/api/pouley_private.h"
++#include "extensions/browser/extension_registry.h"
++#include "extensions/common/extension.h"
++#include "ui/gfx/geometry/rect.h"
++
++#if BUILDFLAG(IS_WIN)
++#include "chrome/browser/password_manager/pouley_migration.h"
++#endif
++
++namespace extensions {
++
++namespace {
++
++BrowserWindowInterface* BrowserFor(ExtensionFunction* function,
++                                   int window_id,
++                                   std::string* error) {
++  WindowController* controller = ExtensionTabUtil::GetControllerFromWindowID(
++      ChromeExtensionFunctionDetails(function), window_id, error);
++  return controller ? controller->GetBrowserWindowInterface() : nullptr;
++}
++
++}  // namespace
++
++ExtensionFunction::ResponseAction
++PouleyPrivateRunExtensionActionFunction::Run() {
++  auto params = api::pouley_private::RunExtensionAction::Params::Create(args());
++  EXTENSION_FUNCTION_VALIDATE(params);
++  const auto& o = params->options;
++  std::string error;
++  BrowserWindowInterface* browser =
++      BrowserFor(this, o.window_id, &error);
++  if (!browser) {
++    return RespondNow(Error(std::move(error)));
++  }
++  const Extension* target =
++      ExtensionRegistry::Get(browser_context())
++          ->enabled_extensions()
++          .GetByID(o.extension_id);
++  if (!target) {
++    return RespondNow(Error("Extension introuvable ou désactivée."));
++  }
++  const gfx::Rect anchor(o.left, o.top, o.width, o.height);
++  return RespondNow(
++      WithArguments(pouley::RunExtensionAction(browser, *target, anchor)));
++}
++
++ExtensionFunction::ResponseAction
++PouleyPrivateCloseExtensionPanelFunction::Run() {
++  auto params =
++      api::pouley_private::CloseExtensionPanel::Params::Create(args());
++  EXTENSION_FUNCTION_VALIDATE(params);
++  std::string error;
++  BrowserWindowInterface* browser = BrowserFor(this, params->window_id, &error);
++  if (!browser) {
++    return RespondNow(Error(std::move(error)));
++  }
++  return RespondNow(
++      WithArguments(pouley::CloseExtensionDock(browser, std::string())));
++}
++
++ExtensionFunction::ResponseAction
++PouleyPrivateGetExtensionPanelFunction::Run() {
++  auto params = api::pouley_private::GetExtensionPanel::Params::Create(args());
++  EXTENSION_FUNCTION_VALIDATE(params);
++  std::string error;
++  BrowserWindowInterface* browser = BrowserFor(this, params->window_id, &error);
++  if (!browser) {
++    return RespondNow(Error(std::move(error)));
++  }
++  return RespondNow(WithArguments(pouley::GetExtensionDock(browser)));
++}
++
++ExtensionFunction::ResponseAction
++PouleyPrivateGetMigrationStateFunction::Run() {
++#if BUILDFLAG(IS_WIN)
++  base::ThreadPool::PostTaskAndReplyWithResult(
++      FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_VISIBLE},
++      base::BindOnce([] {
++        return pouley_migration::ReadPendingState().value_or(std::string());
++      }),
++      base::BindOnce(&PouleyPrivateGetMigrationStateFunction::OnState, this));
++  return RespondLater();
++#else
++  return RespondNow(WithArguments(std::string()));
++#endif
++}
++
++void PouleyPrivateGetMigrationStateFunction::OnState(std::string state) {
++  Respond(WithArguments(std::move(state)));
++}
++
++ExtensionFunction::ResponseAction
++PouleyPrivateMarkMigrationImportedFunction::Run() {
++#if BUILDFLAG(IS_WIN)
++  base::ThreadPool::PostTask(
++      FROM_HERE, {base::MayBlock(), base::TaskPriority::BEST_EFFORT},
++      base::BindOnce(&pouley_migration::MarkStateImported));
++#endif
++  return RespondNow(NoArguments());
++}
++
++ExtensionFunction::ResponseAction PouleyPrivateSetAlwaysOnTopFunction::Run() {
++  auto params = api::pouley_private::SetAlwaysOnTop::Params::Create(args());
++  EXTENSION_FUNCTION_VALIDATE(params);
++  std::string error;
++  BrowserWindowInterface* browser = BrowserFor(this, params->window_id, &error);
++  if (!browser) {
++    return RespondNow(Error(std::move(error)));
++  }
++  return RespondNow(
++      WithArguments(pouley::SetAlwaysOnTop(browser, params->on_top)));
++}
++
++}  // namespace extensions
+diff --git a/chrome/browser/extensions/api/pouley_private/pouley_private_api.h b/chrome/browser/extensions/api/pouley_private/pouley_private_api.h
+new file mode 100644
+index 0000000000..18bb21f088
+--- /dev/null
++++ b/chrome/browser/extensions/api/pouley_private/pouley_private_api.h
+@@ -0,0 +1,82 @@
++// Copyright 2026 PouleyPwolu
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#ifndef CHROME_BROWSER_EXTENSIONS_API_POULEY_PRIVATE_POULEY_PRIVATE_API_H_
++#define CHROME_BROWSER_EXTENSIONS_API_POULEY_PRIVATE_POULEY_PRIVATE_API_H_
++
++#include <string>
++
++#include "extensions/browser/extension_function.h"
++
++// API chrome.pouleyPrivate, réservée à l'extension intégrée PouleyPwolu.
++// Compilée avec chrome/browser/ui/views/extensions:extension_popup_impl.
++
++namespace extensions {
++
++class PouleyPrivateRunExtensionActionFunction : public ExtensionFunction {
++ public:
++  DECLARE_EXTENSION_FUNCTION("pouleyPrivate.runExtensionAction",
++                             POULEYPRIVATE_RUNEXTENSIONACTION)
++
++ protected:
++  ~PouleyPrivateRunExtensionActionFunction() override = default;
++  ResponseAction Run() override;
++};
++
++class PouleyPrivateCloseExtensionPanelFunction : public ExtensionFunction {
++ public:
++  DECLARE_EXTENSION_FUNCTION("pouleyPrivate.closeExtensionPanel",
++                             POULEYPRIVATE_CLOSEEXTENSIONPANEL)
++
++ protected:
++  ~PouleyPrivateCloseExtensionPanelFunction() override = default;
++  ResponseAction Run() override;
++};
++
++class PouleyPrivateGetExtensionPanelFunction : public ExtensionFunction {
++ public:
++  DECLARE_EXTENSION_FUNCTION("pouleyPrivate.getExtensionPanel",
++                             POULEYPRIVATE_GETEXTENSIONPANEL)
++
++ protected:
++  ~PouleyPrivateGetExtensionPanelFunction() override = default;
++  ResponseAction Run() override;
++};
++
++class PouleyPrivateGetMigrationStateFunction : public ExtensionFunction {
++ public:
++  DECLARE_EXTENSION_FUNCTION("pouleyPrivate.getMigrationState",
++                             POULEYPRIVATE_GETMIGRATIONSTATE)
++
++ protected:
++  ~PouleyPrivateGetMigrationStateFunction() override = default;
++  ResponseAction Run() override;
++
++ private:
++  void OnState(std::string state);
++};
++
++class PouleyPrivateMarkMigrationImportedFunction : public ExtensionFunction {
++ public:
++  DECLARE_EXTENSION_FUNCTION("pouleyPrivate.markMigrationImported",
++                             POULEYPRIVATE_MARKMIGRATIONIMPORTED)
++
++ protected:
++  ~PouleyPrivateMarkMigrationImportedFunction() override = default;
++  ResponseAction Run() override;
++};
++
++class PouleyPrivateSetAlwaysOnTopFunction : public ExtensionFunction {
++ public:
++  DECLARE_EXTENSION_FUNCTION("pouleyPrivate.setAlwaysOnTop",
++                             POULEYPRIVATE_SETALWAYSONTOP)
++
++ protected:
++  ~PouleyPrivateSetAlwaysOnTopFunction() override = default;
++  ResponseAction Run() override;
++};
++
++}  // namespace extensions
++
++#endif  // CHROME_BROWSER_EXTENSIONS_API_POULEY_PRIVATE_POULEY_PRIVATE_API_H_
+diff --git a/chrome/browser/extensions/api/side_panel/side_panel_api.cc b/chrome/browser/extensions/api/side_panel/side_panel_api.cc
+index e5fc821924..38347fb24d 100644
+--- a/chrome/browser/extensions/api/side_panel/side_panel_api.cc
++++ b/chrome/browser/extensions/api/side_panel/side_panel_api.cc
+@@ -12,11 +12,38 @@
+ #include "chrome/browser/extensions/chrome_extension_function_details.h"
+ #include "chrome/browser/extensions/extension_tab_util.h"
+ #include "chrome/common/extensions/api/side_panel.h"
++#include "chrome/browser/extensions/pouley_dock.h"
++#include "chrome/browser/extensions/window_controller.h"
+ #include "extensions/common/extension.h"
+ #include "extensions/common/manifest.h"
+ 
+ namespace extensions {
+ 
++namespace {
++
++// PouleyPwolu : le panneau latéral de Chromium affiche la barre PouleyPwolu. Les
++// panneaux des autres extensions (Claude…) s'ouvrent à droite de la page.
++BrowserWindowInterface* PouleyBrowserFor(ExtensionFunction* function,
++                                         std::optional<int> window_id,
++                                         std::optional<int> tab_id,
++                                         bool include_incognito) {
++  std::string error;
++  WindowController* controller = nullptr;
++  if (window_id) {
++    controller = ExtensionTabUtil::GetControllerFromWindowID(
++        ChromeExtensionFunctionDetails(function), *window_id, &error);
++  } else if (tab_id) {
++    content::WebContents* contents = nullptr;
++    int index = -1;
++    ExtensionTabUtil::GetTabById(*tab_id, function->browser_context(),
++                                 include_incognito, &controller, &contents,
++                                 &index);
++  }
++  return controller ? controller->GetBrowserWindowInterface() : nullptr;
++}
++
++}  // namespace
++
+ SidePanelApiFunction::SidePanelApiFunction() = default;
+ SidePanelApiFunction::~SidePanelApiFunction() = default;
+ SidePanelService* SidePanelApiFunction::GetService() {
+@@ -107,6 +134,20 @@ ExtensionFunction::ResponseAction SidePanelOpenFunction::RunFunction() {
+     params->options.window_id = window_controller->GetWindowId();
+   }
+ 
++  if (!Manifest::IsComponentLocation(extension()->location())) {
++    BrowserWindowInterface* browser = PouleyBrowserFor(
++        this, params->options.window_id, params->options.tab_id,
++        include_incognito_information());
++    auto options = GetService()->GetOptions(*extension(), params->options.tab_id);
++    if (!browser || !options.path ||
++        !pouley::OpenExtensionDock(
++            browser, *extension(),
++            extension()->ResolveExtensionURL(*options.path))) {
++      return RespondNow(Error("No active side panel for this extension."));
++    }
++    return RespondNow(NoArguments());
++  }
++
+   SidePanelService* service = GetService();
+   base::expected<bool, std::string> open_panel_result;
+   if (params->options.tab_id) {
+@@ -152,6 +193,15 @@ ExtensionFunction::ResponseAction SidePanelCloseFunction::RunFunction() {
+         Error("At least one of `tabId` and `windowId` must be provided"));
+   }
+ 
++  if (!Manifest::IsComponentLocation(extension()->location())) {
++    pouley::CloseExtensionDock(
++        PouleyBrowserFor(this, params->options.window_id,
++                         params->options.tab_id,
++                         include_incognito_information()),
++        extension()->id());
++    return RespondNow(NoArguments());
++  }
++
+   SidePanelService* service = GetService();
+   base::expected<bool, std::string> close_panel_result;
+   if (params->options.tab_id) {
+diff --git a/chrome/browser/extensions/pouley_dock.h b/chrome/browser/extensions/pouley_dock.h
+new file mode 100644
+index 0000000000..fbb5e2442c
+--- /dev/null
++++ b/chrome/browser/extensions/pouley_dock.h
+@@ -0,0 +1,52 @@
++// Copyright 2026 PouleyPwolu
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#ifndef CHROME_BROWSER_EXTENSIONS_POULEY_DOCK_H_
++#define CHROME_BROWSER_EXTENSIONS_POULEY_DOCK_H_
++
++#include <string>
++
++class BrowserWindowInterface;
++class GURL;
++
++namespace extensions {
++class Extension;
++}
++
++namespace gfx {
++class Rect;
++}
++
++// PouleyPwolu : la barre PouleyPwolu occupe le panneau latéral de Chromium. Les
++// extensions s'affichent donc ailleurs :
++// - leur fenêtre (popup) s'ouvre à côté de leur bouton dans la barre ;
++// - leur panneau latéral (Claude…) s'ouvre à droite de la page, qui rétrécit.
++// Implémenté dans chrome/browser/ui/views/extensions/pouley_dock.cc.
++namespace pouley {
++
++// Ouvre le panneau de `extension` (adresse `url`) à droite de la page.
++bool OpenExtensionDock(BrowserWindowInterface* browser,
++                       const extensions::Extension& extension,
++                       const GURL& url);
++
++// Ferme le panneau ouvert à droite de la page. `extension_id` vide : quel qu'il soit.
++bool CloseExtensionDock(BrowserWindowInterface* browser,
++                        const std::string& extension_id);
++
++// Identifiant de l'extension dont le panneau est ouvert, ou chaîne vide.
++std::string GetExtensionDock(BrowserWindowInterface* browser);
++
++// Clic sur le bouton d'une extension dans la barre PouleyPwolu : comme un clic sur
++// son bouton dans la barre d'outils de Chrome. `anchor` : position du bouton dans
++// la barre. Renvoie "popup", "panel", "closed", "action" ou "none".
++std::string RunExtensionAction(BrowserWindowInterface* browser,
++                               const extensions::Extension& extension,
++                               const gfx::Rect& anchor);
++
++// Fenêtre toujours au premier plan (onglet flottant).
++bool SetAlwaysOnTop(BrowserWindowInterface* browser, bool on_top);
++
++}  // namespace pouley
++
++#endif  // CHROME_BROWSER_EXTENSIONS_POULEY_DOCK_H_
+diff --git a/chrome/browser/ui/views/extensions/BUILD.gn b/chrome/browser/ui/views/extensions/BUILD.gn
+index 0002e8dde4..440a502a98 100644
+--- a/chrome/browser/ui/views/extensions/BUILD.gn
++++ b/chrome/browser/ui/views/extensions/BUILD.gn
+@@ -887,7 +887,15 @@ source_set("extension_popup") {
+ }
+ 
+ source_set("extension_popup_impl") {
+-  sources = [ "extension_popup.cc" ]
++  sources = [
++    "extension_popup.cc",
++
++    # PouleyPwolu : API chrome.pouleyPrivate, fenêtres et panneaux des extensions.
++    "//chrome/browser/extensions/api/pouley_private/pouley_private_api.cc",
++    "//chrome/browser/extensions/api/pouley_private/pouley_private_api.h",
++    "//chrome/browser/extensions/pouley_dock.h",
++    "pouley_dock.cc",
++  ]
+   public_deps = [
+     ":extension_popup",
+     "//chrome/browser:browser_public_dependencies",
+@@ -896,6 +904,7 @@ source_set("extension_popup_impl") {
+     ":security_dialog_tracker",
+     "//base",
+     "//chrome/browser/devtools",
++    "//chrome/common/extensions/api",
+     "//chrome/browser/extensions",
+     "//components/javascript_dialogs",
+     "//components/web_modal",
+diff --git a/chrome/browser/ui/views/extensions/pouley_dock.cc b/chrome/browser/ui/views/extensions/pouley_dock.cc
+new file mode 100644
+index 0000000000..5e4f1f5e78
+--- /dev/null
++++ b/chrome/browser/ui/views/extensions/pouley_dock.cc
+@@ -0,0 +1,245 @@
++// Copyright 2026 PouleyPwolu
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#include "chrome/browser/extensions/pouley_dock.h"
++
++#include <algorithm>
++#include <memory>
++#include <optional>
++#include <utility>
++
++#include "base/functional/bind.h"
++#include "base/functional/callback_helpers.h"
++#include "base/memory/weak_ptr.h"
++#include "base/task/sequenced_task_runner.h"
++#include "chrome/browser/extensions/api/side_panel/side_panel_service.h"
++#include "chrome/browser/extensions/extension_action_runner.h"
++#include "chrome/browser/extensions/extension_tab_util.h"
++#include "chrome/browser/extensions/extension_view_host.h"
++#include "chrome/browser/extensions/extension_view_host_factory.h"
++#include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
++#include "chrome/browser/ui/tabs/tab_strip_model.h"
++#include "chrome/browser/ui/views/extensions/extension_popup.h"
++#include "chrome/browser/ui/views/extensions/extension_view_views.h"
++#include "chrome/browser/ui/views/frame/browser_view.h"
++#include "chrome/browser/ui/views/frame/multi_contents_view.h"
++#include "chrome/browser/ui/views/side_panel/side_panel.h"
++#include "extensions/browser/extension_action.h"
++#include "extensions/browser/extension_action_manager.h"
++#include "extensions/common/extension.h"
++#include "ui/base/metadata/metadata_header_macros.h"
++#include "ui/base/metadata/metadata_impl_macros.h"
++#include "ui/gfx/geometry/rect.h"
++#include "ui/gfx/geometry/rounded_corners_f.h"
++#include "ui/views/bubble/bubble_anchor.h"
++#include "ui/views/bubble/bubble_border.h"
++#include "ui/views/controls/native/native_view_host.h"
++#include "ui/views/view.h"
++#include "ui/views/view_class_properties.h"
++#include "ui/views/widget/widget.h"
++
++namespace pouley {
++
++namespace {
++
++// Point d'accroche (invisible) des fenêtres d'extensions dans le panneau latéral.
++constexpr int kPouleyAnchorViewId = 0x504f5557;
++constexpr float kDockRadius = 10.f;
++
++// Le panneau d'une extension à droite de la page : il garde l'hôte de la page de
++// l'extension en vie tant qu'il est affiché.
++class PouleyDockView : public views::View {
++  METADATA_HEADER(PouleyDockView, views::View)
++
++ public:
++  PouleyDockView(Profile* profile,
++                 std::unique_ptr<extensions::ExtensionViewHost> host,
++                 std::string extension_id)
++      : host_(std::move(host)), extension_id_(std::move(extension_id)) {
++    SetUseDefaultFillLayout(true);
++    auto view = std::make_unique<ExtensionViewViews>(profile, host_.get());
++    view->SetVisible(true);
++    extension_view_ = AddChildView(std::move(view));
++    // window.close() dans le panneau : il se ferme (après le retour de l'hôte).
++    host_->SetCloseHandler(base::BindOnce(
++        [](base::WeakPtr<PouleyDockView> self, extensions::ExtensionHost*) {
++          base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
++              FROM_HERE, base::BindOnce(&PouleyDockView::CloseSelf, self));
++        },
++        weak_factory_.GetWeakPtr()));
++  }
++  PouleyDockView(const PouleyDockView&) = delete;
++  PouleyDockView& operator=(const PouleyDockView&) = delete;
++  ~PouleyDockView() override {
++    // La vue de l'extension utilise l'hôte : elle disparaît avant lui.
++    extension_view_ = nullptr;
++    RemoveAllChildViews();
++  }
++
++  const std::string& extension_id() const { return extension_id_; }
++
++  // views::View:
++  void AddedToWidget() override {
++    if (extension_view_) {
++      extension_view_->holder()->SetNativeViewCornerRadii(
++          gfx::RoundedCornersF(kDockRadius));
++    }
++  }
++
++ private:
++  void CloseSelf() {
++    if (auto* mcv = static_cast<MultiContentsView*>(parent())) {
++      mcv->SetPouleyDock(nullptr);
++    }
++  }
++
++  std::unique_ptr<extensions::ExtensionViewHost> host_;
++  raw_ptr<ExtensionViewViews> extension_view_ = nullptr;
++  const std::string extension_id_;
++  base::WeakPtrFactory<PouleyDockView> weak_factory_{this};
++};
++
++BEGIN_METADATA(PouleyDockView)
++END_METADATA
++
++MultiContentsView* MultiContentsOf(BrowserWindowInterface* browser) {
++  BrowserView* browser_view =
++      browser ? BrowserView::GetBrowserViewForBrowser(browser) : nullptr;
++  return browser_view ? browser_view->multi_contents_view() : nullptr;
++}
++
++PouleyDockView* DockOf(BrowserWindowInterface* browser) {
++  MultiContentsView* mcv = MultiContentsOf(browser);
++  return mcv ? static_cast<PouleyDockView*>(mcv->pouley_dock()) : nullptr;
++}
++
++// Accroche invisible posée sur le bouton de l'extension, dans le panneau latéral.
++views::View* AnchorFor(BrowserView* browser_view, const gfx::Rect& rect) {
++  SidePanel* side_panel = browser_view->side_panel();
++  views::View* host = side_panel && side_panel->GetVisible()
++                          ? static_cast<views::View*>(side_panel)
++                          : static_cast<views::View*>(browser_view);
++  views::View* anchor = host->GetViewByID(kPouleyAnchorViewId);
++  if (!anchor || anchor->parent() != host) {
++    auto view = std::make_unique<views::View>();
++    view->SetID(kPouleyAnchorViewId);
++    view->SetProperty(views::kViewIgnoredByLayoutKey, true);
++    view->SetCanProcessEventsWithinSubtree(false);
++    anchor = host->AddChildView(std::move(view));
++  }
++  gfx::Rect bounds = rect;
++  bounds.set_width(std::max(1, bounds.width()));
++  bounds.set_height(std::max(1, bounds.height()));
++  anchor->SetBoundsRect(bounds);
++  return anchor;
++}
++
++}  // namespace
++
++bool OpenExtensionDock(BrowserWindowInterface* browser,
++                       const extensions::Extension& extension,
++                       const GURL& url) {
++  MultiContentsView* mcv = MultiContentsOf(browser);
++  if (!mcv || !url.is_valid()) {
++    return false;
++  }
++  std::unique_ptr<extensions::ExtensionViewHost> host =
++      extensions::ExtensionViewHostFactory::CreateSidePanelHost(
++          extension, url, browser, /*tab_interface=*/nullptr);
++  if (!host) {
++    return false;
++  }
++  mcv->SetPouleyDock(std::make_unique<PouleyDockView>(
++      browser->GetProfile(), std::move(host), extension.id()));
++  return true;
++}
++
++bool CloseExtensionDock(BrowserWindowInterface* browser,
++                        const std::string& extension_id) {
++  PouleyDockView* dock = DockOf(browser);
++  if (!dock || (!extension_id.empty() && dock->extension_id() != extension_id)) {
++    return false;
++  }
++  MultiContentsOf(browser)->SetPouleyDock(nullptr);
++  return true;
++}
++
++std::string GetExtensionDock(BrowserWindowInterface* browser) {
++  PouleyDockView* dock = DockOf(browser);
++  return dock ? dock->extension_id() : std::string();
++}
++
++std::string RunExtensionAction(BrowserWindowInterface* browser,
++                               const extensions::Extension& extension,
++                               const gfx::Rect& anchor) {
++  BrowserView* browser_view =
++      browser ? BrowserView::GetBrowserViewForBrowser(browser) : nullptr;
++  content::WebContents* contents =
++      browser ? browser->GetTabStripModel()->GetActiveWebContents() : nullptr;
++  if (!browser_view || !contents) {
++    return "none";
++  }
++  auto* runner = extensions::ExtensionActionRunner::GetForWebContents(contents);
++  if (!runner) {
++    return "none";
++  }
++  const int tab_id = extensions::ExtensionTabUtil::GetTabId(contents);
++  switch (runner->RunAction(&extension, /*grant_tab_permissions=*/true)) {
++    case extensions::ExtensionAction::ShowAction::kToggleSidePanel: {
++      if (CloseExtensionDock(browser, extension.id())) {
++        return "closed";
++      }
++      auto* service = extensions::SidePanelService::Get(browser->GetProfile());
++      if (!service) {
++        return "none";
++      }
++      auto options = service->GetOptions(extension, tab_id);
++      if (!options.path) {
++        return "none";
++      }
++      return OpenExtensionDock(browser, extension,
++                               extension.ResolveExtensionURL(*options.path))
++                 ? "panel"
++                 : "none";
++    }
++    case extensions::ExtensionAction::ShowAction::kShowPopup: {
++      extensions::ExtensionAction* action =
++          extensions::ExtensionActionManager::Get(browser->GetProfile())
++              ->GetExtensionAction(extension);
++      if (!action) {
++        return "none";
++      }
++      std::unique_ptr<extensions::ExtensionViewHost> host =
++          extensions::ExtensionViewHostFactory::CreatePopupHost(
++              extension, action->GetPopupUrl(tab_id), browser);
++      if (!host) {
++        return "none";
++      }
++      // La barre est à gauche : la fenêtre s'ouvre à droite du bouton.
++      ExtensionPopup::ShowPopup(
++          browser, std::move(host),
++          views::BubbleAnchor(AnchorFor(browser_view, anchor)),
++          views::BubbleBorder::LEFT_TOP, PopupShowAction::kShow,
++          base::DoNothing());
++      return "popup";
++    }
++    case extensions::ExtensionAction::ShowAction::kNone:
++      return "action";
++  }
++  return "none";
++}
++
++bool SetAlwaysOnTop(BrowserWindowInterface* browser, bool on_top) {
++  BrowserView* browser_view =
++      browser ? BrowserView::GetBrowserViewForBrowser(browser) : nullptr;
++  if (!browser_view || !browser_view->GetWidget()) {
++    return false;
++  }
++  browser_view->GetWidget()->SetZOrderLevel(
++      on_top ? ui::ZOrderLevel::kFloatingWindow : ui::ZOrderLevel::kNormal);
++  return true;
++}
++
++}  // namespace pouley
+diff --git a/chrome/browser/ui/views/frame/multi_contents_view.cc b/chrome/browser/ui/views/frame/multi_contents_view.cc
+index 76475b5693..fdea87ede6 100644
+--- a/chrome/browser/ui/views/frame/multi_contents_view.cc
++++ b/chrome/browser/ui/views/frame/multi_contents_view.cc
+@@ -495,6 +495,17 @@ void MultiContentsView::OnReadAnythingOverlayFocused(
+ 
+ // TODO(crbug.com/397777917): Consider using FlexSpecification weights and
+ // interior margins instead of a custom layout once this bug is resolved.
++void MultiContentsView::SetPouleyDock(std::unique_ptr<views::View> dock) {
++  if (pouley_dock_) {
++    std::unique_ptr<views::View> old =
++        RemoveChildViewT(pouley_dock_.ExtractAsDangling());
++  }
++  if (dock) {
++    pouley_dock_ = AddChildView(std::move(dock));
++  }
++  InvalidateLayout();
++}
++
+ views::ProposedLayout MultiContentsView::CalculateProposedLayout(
+     const views::SizeBounds& size_bounds) const {
+   views::ProposedLayout layouts;
+@@ -506,6 +517,18 @@ views::ProposedLayout MultiContentsView::CalculateProposedLayout(
+ 
+   gfx::Rect available_space = gfx::Rect(width, height);
+ 
++  // PouleyPwolu : le panneau d'extension prend la droite, la page rétrécit.
++  if (pouley_dock_ && pouley_dock_->GetVisible()) {
++    constexpr int kDockGap = 8;
++    const int dock_width = std::min(420, available_space.width() / 2);
++    layouts.child_layouts.emplace_back(
++        pouley_dock_.get(), true,
++        gfx::Rect(available_space.right() - dock_width, available_space.y(),
++                  dock_width, available_space.height()));
++    available_space.set_width(
++        std::max(0, available_space.width() - dock_width - kDockGap));
++  }
++
+   const bool show_background =
+       drop_target_view_->GetVisible() || IsInSplitView();
+   layouts.child_layouts.emplace_back(background_view_.get(), show_background,
+diff --git a/chrome/browser/ui/views/frame/multi_contents_view.h b/chrome/browser/ui/views/frame/multi_contents_view.h
+index 6ecb49a239..15789223b2 100644
+--- a/chrome/browser/ui/views/frame/multi_contents_view.h
++++ b/chrome/browser/ui/views/frame/multi_contents_view.h
+@@ -96,6 +96,11 @@ class MultiContentsView
+   // Returns true if more than one WebContents is displayed.
+   bool IsInSplitView() const;
+ 
++  // PouleyPwolu : panneau d'une extension (Claude…) à droite de la page, qui
++  // rétrécit. `dock` nul : ferme le panneau. Voir chrome/browser/extensions/pouley_dock.h.
++  void SetPouleyDock(std::unique_ptr<views::View> dock);
++  views::View* pouley_dock() { return pouley_dock_; }
++
+   // Show the split view without set any WebContents and update the size and
+   // layout of contents views based on `visual_data`, this is used to prepare
+   // the layout and prevent a re-layout of WebContents.
+@@ -305,6 +310,9 @@ class MultiContentsView
+   // contents_web_view_.
+   raw_ptr<views::View> lens_overlay_view_ = nullptr;
+ 
++  // PouleyPwolu : panneau d'extension à droite de la page.
++  raw_ptr<views::View> pouley_dock_ = nullptr;
++
+   // The handle responsible for resizing the two contents views as relative to
+   // each other.
+   raw_ptr<MultiContentsResizeArea> resize_area_ = nullptr;
+diff --git a/chrome/common/extensions/api/_api_features.json b/chrome/common/extensions/api/_api_features.json
+index 506e62180d..152a98e433 100644
+--- a/chrome/common/extensions/api/_api_features.json
++++ b/chrome/common/extensions/api/_api_features.json
+@@ -865,6 +865,10 @@
+     "dependencies": ["permission:readingList"],
+     "contexts": ["privileged_extension"]
+   },
++  "pouleyPrivate": {
++    "dependencies": ["permission:pouleyPrivate"],
++    "contexts": ["privileged_extension"]
++  },
+   "resourcesPrivate": [{
+     "dependencies": ["permission:resourcesPrivate"],
+     "contexts": ["privileged_extension"]
+diff --git a/chrome/common/extensions/api/_permission_features.json b/chrome/common/extensions/api/_permission_features.json
+index 8fc9516817..67273ba8e5 100644
+--- a/chrome/common/extensions/api/_permission_features.json
++++ b/chrome/common/extensions/api/_permission_features.json
+@@ -862,6 +862,11 @@
+     "extension_types": ["extension", "legacy_packaged_app"]
+   },
+   "processes": [{
++    // PouleyPwolu : mémoire des onglets dans les réglages (extension intégrée).
++    "channel": "stable",
++    "extension_types": ["extension"],
++    "location": "component"
++  }, {
+     "channel": "dev",
+     "extension_types": ["extension"]
+   }, {
+@@ -921,6 +926,11 @@
+     "extension_types": ["extension"],
+     "min_manifest_version": 3
+   },
++  "pouleyPrivate": {
++    "channel": "stable",
++    "extension_types": ["extension"],
++    "location": "component"
++  },
+   "resourcesPrivate": {
+     "channel": "stable",
+     "extension_types": [
+diff --git a/chrome/common/extensions/api/api_sources.gni b/chrome/common/extensions/api/api_sources.gni
+index 194386bf5e..5c28723685 100644
+--- a/chrome/common/extensions/api/api_sources.gni
++++ b/chrome/common/extensions/api/api_sources.gni
+@@ -90,6 +90,7 @@ if (enable_extensions) {
+     "indigo_private.webidl",
+     "language_settings_private.webidl",
+     "passwords_private.webidl",
++    "pouley_private.json",
+     "resources_private.idl",
+     "safe_browsing_private.idl",
+     "settings_private.idl",
+diff --git a/chrome/common/extensions/api/pouley_private.json b/chrome/common/extensions/api/pouley_private.json
+new file mode 100644
+index 0000000000..c9e3555d44
+--- /dev/null
++++ b/chrome/common/extensions/api/pouley_private.json
+@@ -0,0 +1,89 @@
++// Copyright 2026 PouleyPwolu
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++[
++  {
++    "namespace": "pouleyPrivate",
++    "description": "PouleyPwolu : fenêtres et panneaux des extensions, onglet flottant. Réservé à l'extension intégrée.",
++    "types": [
++      {
++        "id": "ActionOptions",
++        "type": "object",
++        "properties": {
++          "extensionId": {"type": "string"},
++          "windowId": {"type": "integer"},
++          "left": {"type": "integer"},
++          "top": {"type": "integer"},
++          "width": {"type": "integer"},
++          "height": {"type": "integer"}
++        }
++      }
++    ],
++    "functions": [
++      {
++        "name": "runExtensionAction",
++        "type": "function",
++        "description": "Clic sur le bouton d'une extension dans la barre PouleyPwolu.",
++        "parameters": [{"name": "options", "$ref": "ActionOptions"}],
++        "returns_async": {
++          "name": "callback",
++          "parameters": [{"name": "result", "type": "string"}]
++        }
++      },
++      {
++        "name": "closeExtensionPanel",
++        "type": "function",
++        "description": "Ferme le panneau d'extension à droite de la page.",
++        "parameters": [{"name": "windowId", "type": "integer"}],
++        "returns_async": {
++          "name": "callback",
++          "parameters": [{"name": "closed", "type": "boolean"}]
++        }
++      },
++      {
++        "name": "getExtensionPanel",
++        "type": "function",
++        "description": "Extension dont le panneau est ouvert dans la fenêtre (chaîne vide sinon).",
++        "parameters": [{"name": "windowId", "type": "integer"}],
++        "returns_async": {
++          "name": "callback",
++          "parameters": [{"name": "extensionId", "type": "string"}]
++        }
++      },
++      {
++        "name": "getMigrationState",
++        "type": "function",
++        "description": "Poulaillers, onglets et favoris laissés par PouleyPwolu Electron (JSON), chaîne vide sinon.",
++        "parameters": [],
++        "returns_async": {
++          "name": "callback",
++          "parameters": [{"name": "state", "type": "string"}]
++        }
++      },
++      {
++        "name": "markMigrationImported",
++        "type": "function",
++        "description": "Efface l'état de migration une fois importé.",
++        "parameters": [],
++        "returns_async": {
++          "name": "callback",
++          "parameters": []
++        }
++      },
++      {
++        "name": "setAlwaysOnTop",
++        "type": "function",
++        "description": "Garde la fenêtre au premier plan (onglet flottant).",
++        "parameters": [
++          {"name": "windowId", "type": "integer"},
++          {"name": "onTop", "type": "boolean"}
++        ],
++        "returns_async": {
++          "name": "callback",
++          "parameters": [{"name": "ok", "type": "boolean"}]
++        }
++      }
++    ]
++  }
++]
+diff --git a/chrome/common/extensions/permissions/chrome_api_permissions.cc b/chrome/common/extensions/permissions/chrome_api_permissions.cc
+index 86f4a132b4..435a2d03b4 100644
+--- a/chrome/common/extensions/permissions/chrome_api_permissions.cc
++++ b/chrome/common/extensions/permissions/chrome_api_permissions.cc
+@@ -185,6 +185,8 @@ constexpr APIPermissionInfo::InitInfo permissions_to_register[] = {
+     {APIPermissionID::kIndigoPrivate, "indigoPrivate"},
+     {APIPermissionID::kProxyOverrideRulesPrivate, "proxyOverrideRulesPrivate",
+      APIPermissionInfo::kFlagCannotBeOptional},
++    {APIPermissionID::kPouleyPrivate, "pouleyPrivate",
++     APIPermissionInfo::kFlagCannotBeOptional},
+     {APIPermissionID::kResourcesPrivate, "resourcesPrivate",
+      APIPermissionInfo::kFlagCannotBeOptional},
+     {APIPermissionID::kSafeBrowsingPrivate, "safeBrowsingPrivate"},
+diff --git a/extensions/browser/extension_function_histogram_value.h b/extensions/browser/extension_function_histogram_value.h
+index 4f8efeb0d3..b9f929b5d4 100644
+--- a/extensions/browser/extension_function_histogram_value.h
++++ b/extensions/browser/extension_function_histogram_value.h
+@@ -2051,6 +2051,12 @@ enum HistogramValue {
+   ENTERPRISE_WEBRTC_STARTCAPTURE = 1986,
+   ENTERPRISE_WEBRTC_GETCAPTURESTATUS = 1987,
+   ENTERPRISE_WEBRTC_STOPCAPTURE = 1988,
++  POULEYPRIVATE_RUNEXTENSIONACTION = 1989,
++  POULEYPRIVATE_CLOSEEXTENSIONPANEL = 1990,
++  POULEYPRIVATE_GETEXTENSIONPANEL = 1991,
++  POULEYPRIVATE_SETALWAYSONTOP = 1992,
++  POULEYPRIVATE_GETMIGRATIONSTATE = 1993,
++  POULEYPRIVATE_MARKMIGRATIONIMPORTED = 1994,
+   // Last entry: Add new entries above, then run:
+   // tools/metrics/histograms/update_extension_histograms.py
+   ENUM_BOUNDARY
+diff --git a/extensions/common/mojom/api_permission_id.mojom b/extensions/common/mojom/api_permission_id.mojom
+index 8bc0e9b328..840dc9455f 100644
+--- a/extensions/common/mojom/api_permission_id.mojom
++++ b/extensions/common/mojom/api_permission_id.mojom
+@@ -299,6 +299,7 @@ enum APIPermissionID {
+   kBluetoothPeripheral = 272,
+   kPublicSuffix = 273,
+   kEnterpriseWebrtc = 274,
++  kPouleyPrivate = 275,
+ 
+   // Add new entries at the end of the enum and be sure to update the
+   // "ExtensionPermission3" enum in

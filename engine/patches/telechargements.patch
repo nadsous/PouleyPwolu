@@ -1,0 +1,17 @@
+diff --git a/chrome/browser/download/download_prefs.cc b/chrome/browser/download/download_prefs.cc
+index 07607ea003..e472eb26ed 100644
+--- a/chrome/browser/download/download_prefs.cc
++++ b/chrome/browser/download/download_prefs.cc
+@@ -351,9 +351,11 @@ DownloadPrefs::~DownloadPrefs() = default;
+ // static
+ void DownloadPrefs::RegisterProfilePrefs(
+     user_prefs::PrefRegistrySyncable* registry) {
++  // PouleyPwolu : comme la version Electron, les fichiers vont directement dans
++  // Téléchargements (la barre annonce chaque téléchargement).
+   registry->RegisterBooleanPref(
+       prefs::kPromptForDownload,
+-      true,
++      false,
+       user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
+   registry->RegisterStringPref(prefs::kDownloadExtensionsToOpen, std::string());
+   registry->RegisterListPref(prefs::kDownloadExtensionsToOpenByPolicy, {});

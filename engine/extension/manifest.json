@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "PouleyPwolu",
-  "version": "1.0.0",
+  "version": "0.2.0",
   "description": "Poulaillers, bouclier, inspecteur, détecteur d'IA, stylo, plumes et tenders.",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAtr6lQKzMsHYnn0edYLdvx4A8PbUfU8FP+bwC4xzCkl963aSH5DwMgZaJRvx22av/TTUKLodo8hnzCwjBGPezdZzf3T8Y8/Ndzl5hcg8Q5O3XX7ZtQeC5ZaLQ6AuNeJeoXuwXw7pmm3voBYhVgLjFbjkVbyvtViuMuyGAcxUR/wIEO78ErRuKO89nwNTttnk5A9Ckxjc88xK9IAOwx9AP7bal3AwgSBWIru4XNiQ8F7xaUuj+3SckIsKzwpYWF26eniM/Oeu+lqtaweWPQhw0eMGYv2hShDoanyr6IHjfp1SU/dhlZn7by+XRS1dA0q930bnxxoJPXpsZdfWxgi5YSwIDAQAB",
   "background": {
@@ -31,7 +31,15 @@
     "clipboardWrite",
     "management",
     "declarativeNetRequestFeedback",
-    "downloads"
+    "downloads",
+    "webRequest",
+    "cookies",
+    "system.memory",
+    "browsingData",
+    "contentSettings",
+    "downloads.open",
+    "pouleyPrivate",
+    "processes"
   ],
   "host_permissions": [
     "<all_urls>"
@@ -50,6 +58,67 @@
         "content/cws.js"
       ],
       "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "http://*/*",
+        "https://*/*"
+      ],
+      "js": [
+        "content/probes-main.js"
+      ],
+      "run_at": "document_start",
+      "world": "MAIN"
+    },
+    {
+      "matches": [
+        "http://*/*",
+        "https://*/*"
+      ],
+      "js": [
+        "content/probes.js"
+      ],
+      "run_at": "document_start"
     }
-  ]
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "sidebar/index.html"
+      ],
+      "matches": [
+        "<all_urls>"
+      ]
+    }
+  ],
+  "commands": {
+    "capture": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+S",
+        "mac": "Command+Shift+S"
+      },
+      "description": "Capture d’écran de la zone visible"
+    },
+    "capture-zone": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+X",
+        "mac": "Command+Shift+X"
+      },
+      "description": "Capture d’écran d’une zone"
+    },
+    "stylo": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+D",
+        "mac": "Command+Shift+D"
+      },
+      "description": "Écrire sur la page (stylo)"
+    },
+    "inspecteur": {
+      "suggested_key": {
+        "default": "Ctrl+I",
+        "mac": "Command+I"
+      },
+      "description": "Inspecter le site"
+    }
+  }
 }

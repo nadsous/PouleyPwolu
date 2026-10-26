@@ -62,6 +62,28 @@
     open = build(menuId, items, lastPointer.x, lastPointer.y);
   });
 
+  // Capture d'écran : la barre vient d'être cliquée, elle peut écrire l'image.
+  api.on('clipboard-image', async ({ id, dataUrl }) => {
+    let ok = false;
+    try {
+      const blob = await (await fetch(dataUrl)).blob();
+      await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+      ok = true;
+    } catch {}
+    api.cmd('clip.result', { id, ok });
+  });
+
+  // Grande capture d'écran : enregistrée depuis la barre (voir core/tools.js).
+  api.on('save-image', async ({ id, dataUrl, filename }) => {
+    let downloadId = null;
+    try {
+      const url = URL.createObjectURL(await (await fetch(dataUrl)).blob());
+      downloadId = await chrome.downloads.download({ url, filename, conflictAction: 'uniquify', saveAs: false });
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
+    } catch {}
+    api.cmd('save.result', { id, downloadId });
+  });
+
   api.on('clipboard', (text) => {
     navigator.clipboard.writeText(String(text || '')).catch(() => {});
   });
@@ -69,6 +91,13 @@
   // Page en pleine fenêtre : on ouvre l'écran demandé une fois l'état reçu.
   const q = new URLSearchParams(location.search);
   const page = q.get('page');
+  const panel = q.get('panel');
+  if (panel) {
+    api.getState().then(() => setTimeout(() => {
+      const open = window.pouleyOpen && window.pouleyOpen[panel];
+      if (open) open(q.get('tab') || null);
+    }, 30));
+  }
   if (page) {
     document.title = { settings: 'Paramètres', archive: 'Archive', focus: 'Mon poulailler du jour', editor: 'Poulailler', group: 'Groupe d’œufs' }[page] || 'PouleyPwolu';
     api.getState().then(() => setTimeout(() => {

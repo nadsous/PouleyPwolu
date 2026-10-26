@@ -4,7 +4,11 @@
   const api = window.pouley;
   // Chromium : la barre fait 260 px. Les grands écrans (réglages, archive…) s'ouvrent dans
   // une page PouleyPwolu en pleine fenêtre, qui exécute ce même fichier (mode « page »).
-  const inChromiumBar = () => document.body.classList.contains('chromium') && !document.body.classList.contains('page-mode');
+  const inChromiumBar = () => document.body.classList.contains('chromium') && !document.body.classList.contains('page-mode') && !document.body.classList.contains('panel-mode');
+  // Panneau posé sur une page (index.html?panel=inspector|aid&rec=<onglet>) : il concerne cet onglet.
+  const panelQuery = new URLSearchParams(location.search);
+  const panelMode = panelQuery.get('panel');
+  const panelRec = panelQuery.get('rec');
   const inPageMode = () => document.body.classList.contains('page-mode');
   const pageOnly = (name, arg) => {
     if (!inChromiumBar()) return false;
@@ -69,6 +73,7 @@
   let lastScrolledTab = null;
   let inspector = { open: false, tab: 'privacy', data: null, key: null, loading: false };
   let onboardingShown = false;
+  let inspTabSeen = null; // Chromium : onglet pour lequel la barre connaît l'état du panneau
 
   // ───────────────────────────────────────────── utilitaires d'état
   const S = () => snap.state.settings;
@@ -83,7 +88,7 @@
     }
     return null;
   }
-  const current = () => findRec(snap && snap.currentTabId);
+  const current = () => findRec(panelMode ? panelRec : snap && snap.currentTabId);
   const rtOf = (id) => (snap && snap.runtime[id]) || { awake: false };
   const hostOf = (url) => { try { return new URL(url).hostname.replace(/^www\./, ''); } catch { return ''; } };
   const isInternal = (url) => /^pouley:/.test(url || '');
@@ -214,6 +219,10 @@
     }
     lastBlocked = blocked;
 
+    if (inChromiumBar() && snap.currentTabId !== inspTabSeen) {
+      inspTabSeen = snap.currentTabId;
+      api.cmd('inspector.state').then((t) => { inspector.open = !!t; $('#btn-inspector').classList.toggle('on', inspector.open); });
+    }
     $('#btn-inspector').classList.toggle('on', inspector.open);
     renderFocusTool();
 
@@ -660,8 +669,9 @@
   function closeOverlay(silent) {
     if (!overlay) return;
     overlay = null;
-    // Page en pleine fenêtre : fermer l'écran ferme la page.
+    // Page en pleine fenêtre : fermer l'écran ferme la page ; fenêtre sur une page : elle disparaît.
     if (inPageMode() && !silent) { api.cmd('tab.close'); return; }
+    if (panelMode && !silent) { api.cmd('panel.close', panelRec); return; }
     if (snap) applyLook(lookOf(activeP()));
     ov.classList.add('hidden');
     ov.replaceChildren();
@@ -911,6 +921,7 @@
   function sectionItems(id) {
     const st = S();
     const glass = st.windowMaterial && st.windowMaterial !== 'none';
+    const chromium = !!snap.chromium;
     switch (id) {
       case 'ia': return [
         ...AI_EXTENSIONS.map((x) => ({ type: 'aiext', ai: x, name: x.key, label: x.name })),
@@ -927,28 +938,38 @@
           help: snap.cometAvailable ? 'Clic droit sur une page ou un lien → « Ouvrir dans Comet ».' : 'Installe Comet pour pouvoir y ouvrir une page en un clic.' },
       ].filter(Boolean);
       case 'barre': return [
-        { type: 'choice', set: 'sidebarPosition', name: 'position', label: 'Position', help: 'À gauche comme Arc, à droite, ou en haut comme un navigateur classique.',
+        chromium ? null : { type: 'choice', set: 'sidebarPosition', name: 'position', label: 'Position', help: 'À gauche comme Arc, à droite, ou en haut comme un navigateur classique.',
           options: { left: opt('gauche', 'À gauche', 'Comme Arc'), right: opt('droite', 'À droite', 'Côté droit'), top: opt('haut', 'En haut', 'Onglets classiques') } },
         { type: 'choice', set: 'newTabPosition', name: 'nouvel_onglet', label: 'Où ouvrir les nouveaux onglets', help: 'Barre à gauche ou à droite : en premier = en haut de la liste. Barre en haut : en premier = à gauche, en dernier = à droite.',
           options: { start: opt('premier', 'En premier', 'Comme Arc'), end: opt('dernier', 'En dernier', 'Comme Chrome'), next: opt('apres', 'Après l’onglet ouvert', 'Juste à côté') } },
-        { type: 'bool', set: 'sidebarAutoHide', name: 'masquer', label: 'Masquer la barre', help: 'Elle s’ouvre quand la souris touche le bord de la fenêtre et se referme quand tu en sors. Raccourci : Ctrl+S.' },
-        { type: 'number', set: 'sidebarWidth', name: 'largeur', label: 'Largeur', help: 'Tu peux aussi glisser le bord de la barre.', min: 200, max: 440, unit: 'px' },
-        { type: 'bool', set: 'favHoverPreview', name: 'apercu_favoris', label: 'Aperçu des favoris au survol', help: 'Passe la souris sur un favori (Google Agenda, Gmail…) : la page s’affiche dans une bulle, sans quitter ce que tu fais.' },
+        chromium ? null : { type: 'bool', set: 'sidebarAutoHide', name: 'masquer', label: 'Masquer la barre', help: 'Elle s’ouvre quand la souris touche le bord de la fenêtre et se referme quand tu en sors. Raccourci : Ctrl+S.' },
+        chromium ? null : { type: 'number', set: 'sidebarWidth', name: 'largeur', label: 'Largeur', help: 'Tu peux aussi glisser le bord de la barre.', min: 200, max: 440, unit: 'px' },
+        chromium ? null : { type: 'bool', set: 'favHoverPreview', name: 'apercu_favoris', label: 'Aperçu des favoris au survol', help: 'Passe la souris sur un favori (Google Agenda, Gmail…) : la page s’affiche dans une bulle, sans quitter ce que tu fais.' },
         { type: 'bool', set: 'swipePoulaillers', name: 'glisser_poulaillers', label: 'Glisser pour changer de poulailler', help: 'Un glissement horizontal à deux doigts sur la barre latérale passe au poulailler suivant (comme Arc). Désactivé : glisser fait simplement défiler tes onglets.' },
         { type: 'bool', set: 'autoGroupTabs', name: 'groupes_auto', label: 'Ranger automatiquement en groupes d’œufs', help: 'Quand deux onglets vont ensemble (même site, ou même thème : développement, vidéos, achats…), ils sont réunis côte à côte dans un groupe coloré.' },
         { type: 'actions', items: [{ label: 'Ranger mes onglets maintenant', run: () => { closeOverlay(); groupAuto(); } }] },
-      ];
+      ].filter(Boolean);
       case 'apparence': return [
-        { type: 'choice', set: 'windowMaterial', name: 'verre', label: 'Transparence de la fenêtre', help: 'Avec « Verre dépoli », on voit ce qu’il y a derrière le navigateur, flouté. Les pages web restent bien lisibles.',
+        chromium ? null : { type: 'choice', set: 'windowMaterial', name: 'verre', label: 'Transparence de la fenêtre', help: 'Avec « Verre dépoli », on voit ce qu’il y a derrière le navigateur, flouté. Les pages web restent bien lisibles.',
           options: { acrylic: opt('acrylique', 'Verre dépoli', 'On voit derrière'), mica: opt('mica', 'Mica', 'Teinte légère'), none: opt('opaque', 'Opaque', 'Pas de transparence') } },
-        glass ? { type: 'range', set: 'chromeOpacity', name: 'opacite', label: 'Opacité du fond', help: 'Plus c’est bas, plus on voit à travers.', def: 0.55,
+        glass && !chromium ? { type: 'range', set: 'chromeOpacity', name: 'opacite', label: 'Opacité du fond', help: 'Plus c’est bas, plus on voit à travers.', def: 0.55,
           live: (v) => document.documentElement.style.setProperty('--chrome-a', String(v)) } : null,
         { type: 'choice', set: 'theme', name: 'theme', label: 'Thème', help: 'Couleurs de l’interface.',
           options: { nads: opt('nads', 'Sombre', 'Le thème Nads'), light: opt('clair', 'Clair', 'Pour le grand jour') } },
         { type: 'actions', help: 'Les couleurs, le dégradé et le grain se règlent pour chaque poulailler.',
           items: [{ label: 'Personnaliser le poulailler actuel', run: () => { closeOverlay(); setTimeout(() => openPoulaillerEditor(activeP()), 60); } }] },
       ].filter(Boolean);
-      case 'coffre': {
+      case 'coffre': if (chromium) return [
+        { type: 'info', name: 'gestionnaire', label: 'Gestionnaire de mots de passe', value: 'Chromium',
+          help: 'Tes identifiants sont rangés par Chromium, chiffrés avec une clé protégée par Windows. Ceux de ton ancien coffre PouleyPwolu y sont importés au passage au nouveau moteur.' },
+        { type: 'actions', items: [
+          { label: 'Ouvrir mes mots de passe', cmd: 'coffre', run: () => { api.cmd('tab.new', { url: 'chrome://password-manager/passwords' }); } },
+          { label: 'Vérifier mes mots de passe', cmd: 'coffre --verifier', run: () => { api.cmd('tab.new', { url: 'chrome://password-manager/checkup' }); } },
+          { label: 'Importer un fichier CSV', cmd: 'coffre --importer', run: () => { api.cmd('tab.new', { url: 'chrome://password-manager/settings' }); } },
+        ] },
+      ];
+      // falls through
+      case 'coffre-electron': {
         const v = snap.vault || {};
         const never = st.vaultNever || [];
         return [
@@ -983,9 +1004,9 @@
         { type: 'bool', set: 'notifSound', name: 'cri_de_poule', label: 'Cri de poule', help: 'Joue un cri de poule pour les alertes, les téléchargements terminés et les notifications des sites.' },
         { type: 'range', set: 'notifVolume', name: 'volume', label: 'Volume', help: '', def: 0.6 },
         { type: 'bool', set: 'mediaPlayer', name: 'mini_lecteur', label: 'Mini-lecteur de musique', help: 'Affiche le morceau en cours (YouTube, YouTube Music, SoundCloud…) avec lecture / pause / suivant, dans la barre.' },
-        { type: 'bool', set: 'mediaSystem', name: 'musique_windows', label: 'Piloter la musique des applications (Spotify…)', help: 'Affiche et contrôle aussi Spotify ou une autre application qui joue de la musique sur Windows. Spotify Web ne peut pas jouer dans PouleyPwolu (protection DRM) : utilise l’application Spotify.' },
+        chromium ? null : { type: 'bool', set: 'mediaSystem', name: 'musique_windows', label: 'Piloter la musique des applications (Spotify…)', help: 'Affiche et contrôle aussi Spotify ou une autre application qui joue de la musique sur Windows. Spotify Web ne peut pas jouer dans PouleyPwolu (protection DRM) : utilise l’application Spotify.' },
         { type: 'actions', help: 'Écouter :', items: [['cot', 'Cot'], ['alerte', 'Alerte'], ['oeuf', 'Téléchargement'], ['notif', 'Notification']].map(([k, l]) => ({ label: '▶ ' + l, run: () => window.PouleySound.play(k, st.notifVolume ?? 0.6) })) },
-      ];
+      ].filter(Boolean);
       case 'productivite': return [
         { type: 'bool', set: 'focusEnabled', name: 'compteur', label: 'Compter les plumes et les tenders', help: 'Toutes les 5 minutes passées sur un site de la liste ci-dessous = un tender. 5 minutes actives ailleurs = une plume. Le compteur ne tourne que quand PouleyPwolu est au premier plan et que tu es devant l’écran. Il reste sur ta machine (chiffré), 14 jours maximum.' },
         { type: 'bool', set: 'focusNudge', name: 'petit_mot', label: 'Me prévenir quand les tenders s’accumulent', help: 'Un petit mot de Pouley tous les 3 tenders (15 minutes de distraction).' },
@@ -1010,14 +1031,16 @@
         { type: 'info', name: 'veille_urgence', label: 'Veille d’urgence', value: 'Automatique', help: 'Si Windows n’a plus que 10 % de mémoire libre, les onglets en arrière-plan s’endorment tout de suite.' },
       ].filter(Boolean);
       case 'donnees': return [
-        { type: 'info', name: 'chiffrement', label: 'Tes onglets, favoris et poulaillers', value: snap.security && snap.security.stateEncrypted ? 'Chiffrés' : 'Non chiffrés',
-          help: 'Chiffrés en AES-256-GCM. La clé est protégée par Windows : elle ne s’ouvre que dans ta session, pas depuis un autre compte ni un autre ordinateur.' },
-        { type: 'info', name: 'cookies', label: 'Cookies et connexions aux sites', value: snap.security && snap.security.cookies ? 'Chiffrés' : 'Version de développement',
-          help: 'Dans la version installée, Chromium chiffre les cookies avec une clé protégée par Windows.' },
-        { type: 'bool', set: 'wipeCacheOnExit', name: 'pas_de_cache_sur_le_disque', label: 'Effacer le cache des pages en fermant', help: 'Le cache contient des copies des pages visitées. Il est effacé à chaque fermeture (et au démarrage après un plantage). Les sites se chargent un peu moins vite la première fois.' },
-        { type: 'info', name: 'bitlocker', label: 'Disque chiffré (BitLocker)', value: { on: 'Activé', off: 'Désactivé', paused: 'En pause' }[snap.security && snap.security.bitlocker] || 'Inconnu',
+        chromium ? { type: 'info', name: 'profil', label: 'Tes onglets, favoris et poulaillers', value: 'Sur ta machine',
+          help: 'Rangés dans ton profil Chromium, sur ton ordinateur. Rien n’est envoyé nulle part.' }
+          : { type: 'info', name: 'chiffrement', label: 'Tes onglets, favoris et poulaillers', value: snap.security && snap.security.stateEncrypted ? 'Chiffrés' : 'Non chiffrés',
+            help: 'Chiffrés en AES-256-GCM. La clé est protégée par Windows : elle ne s’ouvre que dans ta session, pas depuis un autre compte ni un autre ordinateur.' },
+        { type: 'info', name: 'cookies', label: 'Cookies et connexions aux sites', value: chromium || (snap.security && snap.security.cookies) ? 'Chiffrés' : 'Version de développement',
+          help: 'Chromium chiffre les cookies avec une clé protégée par Windows.' },
+        { type: 'bool', set: 'wipeCacheOnExit', name: 'pas_de_cache_sur_le_disque', label: chromium ? 'Effacer le cache des pages à chaque démarrage' : 'Effacer le cache des pages en fermant', help: 'Le cache contient des copies des pages visitées. Les sites se chargent un peu moins vite la première fois.' },
+        chromium ? null : { type: 'info', name: 'bitlocker', label: 'Disque chiffré (BitLocker)', value: { on: 'Activé', off: 'Désactivé', paused: 'En pause' }[snap.security && snap.security.bitlocker] || 'Inconnu',
           help: 'BitLocker chiffre tout le disque : si l’ordinateur est volé, éteint, personne ne peut lire tes fichiers ni les données des sites (stockage local, historique de téléchargement…). C’est la protection la plus complète.' },
-        snap.security && snap.security.bitlocker === 'off' ? { type: 'actions', items: [{ label: 'Activer le chiffrement de Windows', run: () => api.cmd('security.bitlocker') }] } : null,
+        !chromium && snap.security && snap.security.bitlocker === 'off' ? { type: 'actions', items: [{ label: 'Activer le chiffrement de Windows', run: () => api.cmd('security.bitlocker') }] } : null,
         { type: 'bool', set: 'clearOnExit', name: 'effacer_a_la_fermeture', label: 'Tout effacer en fermant le navigateur', help: 'Supprime cookies, caches et données des sites à chaque fermeture.' },
         { type: 'actions', items: [
           { label: 'Effacer cookies et données maintenant', danger: true, cmd: 'effacer --tout', run: () => api.cmd('data.clearAll') },
@@ -1029,7 +1052,10 @@
         { type: 'extadd' },
         ...(snap.userExtensions || []).map((e) => ({ type: 'userext', ext: e, name: 'ext_' + e.id.slice(0, 6), label: e.name })),
         ...(snap.extensions || []).map((e) => ({ type: 'extcard', ext: e, set: e.setting, name: e.key, label: e.name })),
-        { type: 'actions', help: 'NadsPDF ouvre automatiquement les PDF du web. Pour un fichier de ton ordinateur :', items: [
+        chromium ? { type: 'actions', help: 'Les extensions installées tournent dans Chromium, comme dans Google Chrome.', items: [
+          { label: 'Gérer toutes les extensions', cmd: 'extensions', run: () => { api.cmd('tab.new', { url: 'chrome://extensions' }); } },
+        ] } : null,
+        chromium ? null : { type: 'actions', help: 'NadsPDF ouvre automatiquement les PDF du web. Pour un fichier de ton ordinateur :', items: [
           { label: 'Ouvrir NadsPDF', cmd: 'nadspdf', run: () => { closeOverlay(); api.cmd('ext.nadspdf.open'); } },
           { label: 'Ouvrir un PDF de l’ordinateur', cmd: 'nadspdf --fichier', run: () => { closeOverlay(); api.cmd('ext.nadspdf.openFile'); } },
         ] },
@@ -1044,6 +1070,7 @@
           unavailable: 'Module de mise à jour absent',
           idle: 'Pas encore vérifié',
           checking: 'Vérification…',
+          available: 'Version ' + (u.version || '') + ' disponible',
           uptodate: 'À jour',
           downloading: 'Téléchargement de la version ' + (u.version || '') + ' : ' + (u.progress || 0) + ' %',
           ready: 'Version ' + u.version + ' prête — redémarre pour l’installer',
@@ -1056,11 +1083,11 @@
             help: snap.defaultBrowser === 'default' ? 'Les liens ouverts depuis tes autres applications arrivent dans PouleyPwolu.'
               : 'Windows te laisse choisir toi-même : le bouton ouvre la bonne page des Paramètres, clique ensuite sur « Définir par défaut ».' },
           snap.defaultBrowser === 'default' ? null : { type: 'actions', items: [{ label: 'Faire de PouleyPwolu mon navigateur par défaut', run: () => api.cmd('browser.default') }] },
-          { type: 'info', name: 'version', label: 'Version', value: 'PouleyPwolu ' + snap.version, help: 'Moteur : Chromium ' + (v.chromium || '?') + ' (Electron ' + (v.electron || '?') + ').' },
+          { type: 'info', name: 'version', label: 'Version', value: 'PouleyPwolu ' + snap.version, help: 'Moteur : Chromium ' + (v.chromium || '?') + (chromium ? ' (ungoogled-chromium, sans les services de Google).' : ' (Electron ' + (v.electron || '?') + ').') },
           { type: 'bool', set: 'autoUpdate', name: 'mises_a_jour_auto', label: 'Mises à jour automatiques', help: 'Vérifie au démarrage puis toutes les 6 h sur la page GitHub de PouleyPwolu (aucun identifiant envoyé), télécharge en arrière-plan et installe au prochain redémarrage. C’est la seule connexion que PouleyPwolu fait de lui-même : garde-la active pour recevoir les correctifs de sécurité de Chromium.' },
           { type: 'info', name: 'etat', label: 'État', value: statusText, help: u.error ? u.error : '' },
-          { type: 'actions', items: u.status === 'ready'
-            ? [{ label: 'Redémarrer et installer ' + u.version, run: () => api.cmd('update.install') }]
+          { type: 'actions', items: u.status === 'ready' || u.status === 'available'
+            ? [{ label: (u.status === 'ready' ? 'Redémarrer et installer ' : 'Télécharger la version ') + u.version, run: () => api.cmd('update.install') }]
             : [{ label: 'Vérifier maintenant', run: () => api.cmd('update.check') }] },
         ].filter(Boolean);
       }
@@ -1124,18 +1151,18 @@
           const awake = r.tabs.length;
           box.replaceChildren(
             h('div', { class: 'mem-top' },
-              h('div', { class: 'mem-big' }, h('b', null, r.totalMb + ' Mo'), h('span', null, 'utilisés par PouleyPwolu')),
+              r.totalMb == null ? null : h('div', { class: 'mem-big' }, h('b', null, r.totalMb + ' Mo'), h('span', null, 'utilisés par PouleyPwolu')),
               h('div', { class: 'mem-big' }, h('b', null, String(awake)), h('span', null, 'page' + (awake > 1 ? 's' : '') + ' éveillée' + (awake > 1 ? 's' : ''))),
-              h('div', { class: 'mem-big' }, h('b', null, r.freePct + ' %'), h('span', null, 'mémoire libre sur l’ordinateur'))),
+              r.freePct == null ? null : h('div', { class: 'mem-big' }, h('b', null, r.freePct + ' %'), h('span', null, 'mémoire libre sur l’ordinateur'))),
             h('div', { class: 'mem-list' }, ...r.tabs.slice(0, 6).map((t) => h('div', { class: 'mem-row' },
-              h('span', { class: 'mem-name' }, t.title), h('i', { style: { width: Math.min(100, t.mb / 4) + '%' } }), h('b', null, t.mb + ' Mo')))),
+              h('span', { class: 'mem-name' }, t.title), t.mb == null ? null : h('i', { style: { width: Math.min(100, t.mb / 4) + '%' } }), t.mb == null ? null : h('b', null, t.mb + ' Mo')))),
             h('div', { class: 'set-actions' },
               h('button', { class: 'btn nads', onclick: async () => {
                 const n = await api.cmd('memory.free');
                 toast(n ? n + ' onglet' + (n > 1 ? 's mis' : ' mis') + ' en veille.' : 'Rien à libérer : seul l’onglet affiché est éveillé.', { title: 'Mémoire' });
                 setTimeout(renderSettingsBody, 1200);
               } }, 'Libérer la mémoire maintenant'),
-              h('span', { class: 'set-help' }, 'Moteur graphique : ' + r.gpuMb + ' Mo (fixe)')));
+              r.gpuMb == null ? null : h('span', { class: 'set-help' }, 'Moteur graphique : ' + r.gpuMb + ' Mo (fixe)')));
         });
         return box;
       }
@@ -1145,7 +1172,7 @@
         input.addEventListener('keydown', (e) => { if (e.key === 'Enter') go(); });
         return h('div', { class: 'set-block ext-add' },
           h('div', { class: 'set-txt' }, h('b', null, 'Ajouter une extension Chrome'),
-            h('p', null, 'Colle le lien d’une extension du Chrome Web Store (Proton Pass, Bitwarden, uBlock Origin Lite, Dark Reader…), ou ouvre sa page dans un onglet : un bandeau propose de l’ajouter. PouleyPwolu vérifie la signature du développeur avant d’installer.')),
+            h('p', null, 'Colle le lien d’une extension du Chrome Web Store (Proton Pass, Bitwarden, uBlock Origin Lite, Dark Reader…), ou ouvre sa page dans un onglet : un bandeau propose de l’ajouter. ' + (snap.chromium ? 'Chromium vérifie la signature et te montre ce que l’extension pourra faire avant de l’installer.' : 'PouleyPwolu vérifie la signature du développeur avant d’installer.'))),
           h('div', { class: 'v-pwrow' }, input,
             h('button', { class: 'btn nads', onclick: go }, 'Installer'),
             h('button', { class: 'btn', onclick: () => { closeOverlay(); api.cmd('tab.new', { url: 'https://chromewebstore.google.com/' }); } }, 'Parcourir le store')));
@@ -1488,6 +1515,13 @@
 
   // ───────────────────────────────────────────── inspecteur
   function toggleInspector(force) {
+    // Chromium : l'inspecteur est un panneau posé à droite de la page (core/inspect.js).
+    if (inChromiumBar()) {
+      api.cmd('inspector.toggle', { tab: inspector.tab, open: typeof force === 'boolean' ? force : undefined })
+        .then((on) => { inspector.open = !!on; render(); });
+      return;
+    }
+    if (panelMode && !(typeof force === 'boolean' ? force : !inspector.open)) { api.cmd('panel.close', panelRec); return; }
     inspector.open = typeof force === 'boolean' ? force : !inspector.open;
     if (inspector.open) {
       inspector.key = null;
@@ -1516,14 +1550,15 @@
     }
     return aidCache.promise;
   }
-  api.on('aidetect', (p) => {
+  api.on('aidetect', showAidetect);
+  function showAidetect(p) {
     openOverlay('aidetect', () => h('div', { class: 'modal settings aid-modal' },
       h('header', null, h('h2', null, p.kind === 'image' ? 'Cette image vient-elle d’une IA ?' : 'Ce texte vient-il d’une IA ?'),
         h('button', { class: 'icon-btn', onclick: () => closeOverlay() }, svg(ICONS.x))),
       h('div', { class: 'body' }, p.kind === 'image'
         ? [window.PouleyInspector.aiImage(p.result, true), h('p', { class: 'aid-note' }, 'Analyse faite sur ton ordinateur, à partir des informations cachées dans le fichier. Une image sans signature peut quand même venir d’une IA.')]
         : window.PouleyInspector.aiText(p.result, { askAi: (prompt) => { closeOverlay(); api.cmd('ai.ask', prompt); }, ai: AI_PROVIDERS[S().ai], text: p.text }))));
-  });
+  }
 
   async function runInspect(key) {
     inspector.key = key;
@@ -1545,6 +1580,7 @@
     const b = e.target.closest('button[data-tab]');
     if (!b) return;
     inspector.tab = b.dataset.tab;
+    if (panelMode) api.cmd('inspector.tab', { rec: panelRec, tab: inspector.tab });
     for (const x of $('#insp-tabs').children) x.classList.toggle('on', x === b);
     if (inspector.data) window.PouleyInspector.render($('#insp-body'), inspector.data, inspector.tab, {
       toast, ai: AI_PROVIDERS[S().ai], askAi: (prompt) => api.cmd('ai.ask', prompt), askPage: () => api.cmd('ai.askPage'), detectPage,
@@ -2151,6 +2187,8 @@
   const findbar = $('#findbar');
   const findInput = $('#find-input');
   function openFind() {
+    // Chromium : sa propre barre de recherche (Ctrl+F).
+    if (document.body.classList.contains('chromium')) return;
     findbar.classList.remove('hidden');
     findInput.focus();
     findInput.select();
@@ -2513,6 +2551,8 @@
   // un rectangle par-dessus, puis le processus principal découpe la zone.
   let shotActive = false;
   async function startRegionShot() {
+    // Chromium : la zone se trace sur la page elle-même (core/tools.js).
+    if (inChromiumBar()) return api.cmd('shot.region');
     if (shotActive || !snap || !snap.currentTabId || overlay || onboardingShown) return;
     if (rtOf(snap.currentTabId).floating) return;
     if (peekState.open) closePeek(true);
@@ -2564,7 +2604,7 @@
     void content.offsetWidth;
     content.classList.add('flash');
     const what = s.mode === 'full' ? 'Page entière' : s.mode === 'region' ? 'Zone' : 'Zone visible';
-    toast(`${what} ${s.copied ? "copiée dans le presse-papiers et " : ""}enregistrée dans Images › PouleyPwolu (${s.width} × ${s.height}).`, {
+    toast(`${what} ${s.copied ? "copiée dans le presse-papiers et " : ""}enregistrée dans ${snap && snap.chromium ? 'Téléchargements' : 'Images'} › PouleyPwolu (${s.width} × ${s.height}).`, {
       title: 'Capture d’écran',
       timeout: 5000,
       action: { label: 'Afficher', run: () => api.cmd('download.show', s.id) },
@@ -2634,6 +2674,9 @@
     focus: () => openFocus(),
     editor: (id) => openPoulaillerEditor(id ? snap.state.poulaillers.find((p) => p.id === id) || null : null),
     group: (id) => { const g = snap.state.poulaillers.flatMap((p) => p.groups || []).find((x) => x.id === id); if (g) openGroupEditor(g); },
+    // Panneaux posés sur une page (chromium.js).
+    inspector: (tab) => openInspectorTab(tab || 'privacy'),
+    aid: async () => { const p = await api.cmd('aidetect.pending', panelRec); if (p) showAidetect(p); else api.cmd('panel.close', panelRec); },
   };
 
   // ───────────────────────────────────────────── démarrage

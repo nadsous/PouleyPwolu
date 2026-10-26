@@ -1,0 +1,178 @@
+diff --git a/chrome/browser/password_manager/pouley_migration.cc b/chrome/browser/password_manager/pouley_migration.cc
+index a5ea5f0e12..e2cadb3d36 100644
+--- a/chrome/browser/password_manager/pouley_migration.cc
++++ b/chrome/browser/password_manager/pouley_migration.cc
+@@ -20,6 +20,9 @@
+ #include "base/logging.h"
+ #include "base/path_service.h"
+ #include "base/values.h"
++#include "base/command_line.h"
++#include "base/process/launch.h"
++#include "base/win/registry.h"
+ #include "crypto/aead.h"
+ 
+ namespace pouley_migration {
+@@ -28,6 +31,7 @@ namespace {
+ 
+ constexpr char kEntropy[] = "pouley-migration";
+ constexpr char kPasswordsAad[] = "pouley-migration-mdp";
++constexpr char kStateAad[] = "pouley-migration-etat";
+ constexpr size_t kMagic = 4, kIv = 12, kTag = 16;
+ 
+ base::FilePath MigrationDir() {
+@@ -83,6 +87,56 @@ std::optional<std::string> Open(const std::vector<uint8_t>& key,
+ 
+ }  // namespace
+ 
++namespace {
++
++// Fichier chiffré `field` du manifeste (« motsDePasse », « etat »), déchiffré.
++std::optional<std::string> ReadSealed(const char* field, std::string_view aad) {
++  base::FilePath dir = MigrationDir();
++  if (dir.empty()) {
++    return std::nullopt;
++  }
++  std::string manifest_text;
++  if (!base::ReadFileToString(dir.Append(L"manifest.json"), &manifest_text)) {
++    return std::nullopt;  // Pas de migration (cas normal).
++  }
++  std::optional<base::DictValue> manifest =
++      base::JSONReader::ReadDict(manifest_text, base::JSON_PARSE_RFC);
++  const std::string* name = manifest ? manifest->FindString(field) : nullptr;
++  if (!manifest || manifest->FindInt("format") != 1 || !name) {
++    return std::nullopt;
++  }
++  std::string key_blob, sealed;
++  if (!base::ReadFileToString(dir.Append(L"cle.dpapi"), &key_blob) ||
++      !base::ReadFileToString(dir.AppendASCII(*name), &sealed)) {
++    return std::nullopt;  // Déjà importé.
++  }
++  std::optional<std::vector<uint8_t>> key = UnprotectKey(key_blob);
++  if (!key) {
++    LOG(ERROR) << "PouleyPwolu : clé de migration illisible.";
++    return std::nullopt;
++  }
++  std::optional<std::string> plain = Open(*key, sealed, aad);
++  std::fill(key->begin(), key->end(), 0);
++  if (!plain) {
++    LOG(ERROR) << "PouleyPwolu : fichier de migration illisible (" << field
++               << ").";
++  }
++  return plain;
++}
++
++}  // namespace
++
++std::optional<std::string> ReadPendingState() {
++  return ReadSealed("etat", kStateAad);
++}
++
++void MarkStateImported() {
++  base::FilePath dir = MigrationDir();
++  if (!dir.empty()) {
++    base::DeleteFile(dir.Append(L"etat.bin"));
++  }
++}
++
+ std::optional<std::string> ReadPendingPasswords() {
+   base::FilePath dir = MigrationDir();
+   if (dir.empty()) {
+@@ -117,6 +171,61 @@ std::optional<std::string> ReadPendingPasswords() {
+   return csv;
+ }
+ 
++void FinishElectronSwitch() {
++  base::FilePath dir = MigrationDir();
++  if (dir.empty() || !base::PathExists(dir.Append(L"manifest.json"))) {
++    return;  // Pas de passage depuis Electron (cas normal).
++  }
++  const base::FilePath done = dir.Append(L"electron-retire");
++  if (base::PathExists(done)) {
++    return;
++  }
++  base::FilePath exe;
++  base::FilePath local;
++  if (!base::PathService::Get(base::FILE_EXE, &exe) ||
++      !base::PathService::Get(base::DIR_LOCAL_APP_DATA, &local)) {
++    return;
++  }
++  // Le choix « navigateur par défaut » de Windows désigne ces ProgIds : on les
++  // garde, ils ouvrent maintenant ce navigateur.
++  const std::wstring quoted = L"\"" + exe.value() + L"\"";
++  const std::wstring icon = exe.value() + L",0";
++  auto set = [](const std::wstring& path, const wchar_t* name,
++                const std::wstring& value) {
++    base::win::RegKey key;
++    if (key.Open(HKEY_CURRENT_USER, path.c_str(), KEY_SET_VALUE) ==
++        ERROR_SUCCESS) {
++      key.WriteValue(name, value.c_str());
++    }
++  };
++  for (const wchar_t* id : {L"PouleyPwoluHTML", L"PouleyPwoluURL"}) {
++    const std::wstring base_path = std::wstring(L"Software\\Classes\\") + id;
++    set(base_path + L"\\shell\\open\\command", L"",
++        quoted + L" --single-argument %1");
++    set(base_path + L"\\DefaultIcon", L"", icon);
++    set(base_path + L"\\Application", L"ApplicationIcon", icon);
++  }
++  const std::wstring client =
++      L"Software\\Clients\\StartMenuInternet\\PouleyPwolu";
++  set(client + L"\\shell\\open\\command", L"", quoted);
++  set(client + L"\\DefaultIcon", L"", icon);
++  set(client + L"\\Capabilities", L"ApplicationIcon", icon);
++
++  // --updated : l'ancienne version part sans effacer ces inscriptions.
++  const base::FilePath uninstaller = local.Append(L"Programs")
++                                         .Append(L"PouleyPwolu")
++                                         .Append(L"Uninstall PouleyPwolu.exe");
++  if (base::PathExists(uninstaller)) {
++    base::CommandLine cmd(uninstaller);
++    cmd.AppendArg("/S");
++    cmd.AppendArg("--updated");
++    base::LaunchOptions options;
++    options.start_hidden = true;
++    base::LaunchProcess(cmd, options);
++  }
++  base::WriteFile(done, "");
++}
++
+ void MarkPasswordsImported() {
+   base::FilePath dir = MigrationDir();
+   if (!dir.empty()) {
+diff --git a/chrome/browser/password_manager/pouley_migration.h b/chrome/browser/password_manager/pouley_migration.h
+index 7c382157cb..8838bc6b80 100644
+--- a/chrome/browser/password_manager/pouley_migration.h
++++ b/chrome/browser/password_manager/pouley_migration.h
+@@ -20,6 +20,18 @@ std::optional<std::string> ReadPendingPasswords();
+ // Efface le fichier des mots de passe une fois importés. Bloquant.
+ void MarkPasswordsImported();
+ 
++// Poulaillers, onglets, favoris et réglages (JSON), si une migration attend
++// d'être importée par l'extension intégrée (chrome.pouleyPrivate). Bloquant.
++std::optional<std::string> ReadPendingState();
++
++// Efface l'état une fois importé. Bloquant.
++void MarkStateImported();
++
++// Une fois, après le passage : les inscriptions de navigateur par défaut de la
++// version Electron (PouleyPwoluURL, PouleyPwoluHTML) ouvrent ce navigateur, et
++// la version Electron est désinstallée (ses données restent). Bloquant.
++void FinishElectronSwitch();
++
+ }  // namespace pouley_migration
+ 
+ #endif  // CHROME_BROWSER_PASSWORD_MANAGER_POULEY_MIGRATION_H_
+diff --git a/chrome/browser/password_manager/startup_passwords_importer.cc b/chrome/browser/password_manager/startup_passwords_importer.cc
+index 8036502f29..69672addd2 100644
+--- a/chrome/browser/password_manager/startup_passwords_importer.cc
++++ b/chrome/browser/password_manager/startup_passwords_importer.cc
+@@ -59,6 +59,9 @@ void StartupPasswordsImporter::StartImport() {
+   // PouleyPwolu : sans --import-passwords, on cherche les mots de passe laissés
+   // par la version Electron (lecture et DPAPI hors du thread UI).
+   if (!command_line->HasSwitch(switches::kImportPasswords)) {
++    base::ThreadPool::PostTask(
++        FROM_HERE, {base::MayBlock(), base::TaskPriority::BEST_EFFORT},
++        base::BindOnce(&pouley_migration::FinishElectronSwitch));
+     base::ThreadPool::PostTaskAndReplyWithResult(
+         FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_VISIBLE},
+         base::BindOnce(&pouley_migration::ReadPendingPasswords),
