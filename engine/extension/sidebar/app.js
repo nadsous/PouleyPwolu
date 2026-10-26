@@ -2097,6 +2097,12 @@
 
   // Fenêtre d'installation : on montre ce que l'extension pourra faire.
   async function installExtension(input) {
+    // Chromium installe lui-même l'extension, après sa fenêtre de confirmation.
+    if (document.body.classList.contains('chromium')) {
+      const r = await api.cmd('ext.installNative', input);
+      toast(r && r.error ? r.error : 'Téléchargement… Chromium va te demander de confirmer l’installation.', { title: 'Extension', alert: !!(r && r.error), timeout: 6000 });
+      return;
+    }
     toast('Téléchargement et vérification de la signature…', { id: 'ext-install', title: 'Extension', timeout: 0 });
     const info = await api.cmd('ext.prepare', input);
     $('#toasts [data-toast="ext-install"]')?.remove();

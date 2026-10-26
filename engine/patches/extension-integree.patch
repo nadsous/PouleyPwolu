@@ -66,7 +66,7 @@ index 0000000000..ce228d07f5
 +}
 diff --git a/chrome/browser/resources/pouley/copy_extension.py b/chrome/browser/resources/pouley/copy_extension.py
 new file mode 100644
-index 0000000000..0b92e23dae
+index 0000000000..e0ba6a065b
 --- /dev/null
 +++ b/chrome/browser/resources/pouley/copy_extension.py
 @@ -0,0 +1,38 @@
@@ -83,7 +83,7 @@ index 0000000000..0b92e23dae
 +import sys
 +
 +# Sous-dossiers prévus dans chrome/installer/mini_installer/chrome.release.
-+ALLOWED = {'', 'icons', 'sidebar', 'content', 'pages', 'lib', 'data'}
++ALLOWED = {'', 'icons', 'sidebar', 'content', 'pages', 'lib', 'data', 'core'}
 +
 +
 +def main():
@@ -109,10 +109,10 @@ index 0000000000..0b92e23dae
 +if __name__ == '__main__':
 +    main()
 diff --git a/chrome/installer/mini_installer/chrome.release b/chrome/installer/mini_installer/chrome.release
-index 037b80488c..95255ba67a 100644
+index 037b80488c..95871d8bd2 100644
 --- a/chrome/installer/mini_installer/chrome.release
 +++ b/chrome/installer/mini_installer/chrome.release
-@@ -42,6 +42,17 @@ v8_context_snapshot.bin: %(VersionDir)s\
+@@ -42,6 +42,18 @@ v8_context_snapshot.bin: %(VersionDir)s\
  # Sub directories living in the version dir
  #
  Extensions\*.*: %(VersionDir)s\Extensions\
@@ -127,6 +127,7 @@ index 037b80488c..95255ba67a 100644
 +resources\pouley\pages\*.*: %(VersionDir)s\resources\pouley\pages\
 +resources\pouley\lib\*.*: %(VersionDir)s\resources\pouley\lib\
 +resources\pouley\data\*.*: %(VersionDir)s\resources\pouley\data\
++resources\pouley\core\*.*: %(VersionDir)s\resources\pouley\core\
  locales\*.pak: %(VersionDir)s\Locales
  
  #

@@ -30,7 +30,8 @@
     "idle",
     "clipboardWrite",
     "management",
-    "declarativeNetRequestFeedback"
+    "declarativeNetRequestFeedback",
+    "downloads"
   ],
   "host_permissions": [
     "<all_urls>"
@@ -39,5 +40,16 @@
     "16": "icons/16.png",
     "48": "icons/48.png",
     "128": "icons/128.png"
-  }
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://chromewebstore.google.com/*"
+      ],
+      "js": [
+        "content/cws.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ]
 }

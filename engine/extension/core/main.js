@@ -10,6 +10,7 @@ import { Store, uid, makePoulailler } from './state.js';
 import * as focus from './focus.js';
 import { siteOf } from '../lib/trackers.js';
 import { applyShield } from '../lib/shield.js';
+import * as ext from './extensions.js';
 
 const { SEARCH_ENGINES, AI_PROVIDERS, fill, keywordSearch } = self.PouleyConfig;
 const { normalize } = self.PouleyIcons;
@@ -622,7 +623,7 @@ function snapshot() {
     versions: { chromium: (navigator.userAgent.match(/Chrome\/([\d.]+)/) || [])[1] || '' },
     update: { status: 'idle' },
     vault: { exists: false, open: false },
-    userExtensions: [],
+    userExtensions: userExtensions,
     security: { stateEncrypted: false, cookies: true, bitlocker: null },
   };
 }
@@ -888,6 +889,46 @@ export const commands = {
   },
 };
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Extensions du Chrome Web Store (core/extensions.js)
+
+let userExtensions = [];
+async function refreshExtensions() {
+  userExtensions = await ext.listUserExtensions(store.state.extPins || {});
+  scheduleBroadcast();
+}
+for (const ev of ['onInstalled', 'onUninstalled', 'onEnabled', 'onDisabled']) chrome.management[ev].addListener(() => ready.then(refreshExtensions));
+
+Object.assign(commands, {
+  'ext.installNative': (input) => ext.installFromStore(input),
+  'ext.enable': ({ id, on } = {}) => chrome.management.setEnabled(id, !!on).then(refreshExtensions),
+  'ext.remove': (id) => chrome.management.uninstall(id, { showConfirmDialog: true }).catch(() => null).then(refreshExtensions),
+  'ext.pin': ({ id, on } = {}) => {
+    store.state.extPins = { ...(store.state.extPins || {}), [id]: !!on };
+    store.save();
+    return refreshExtensions();
+  },
+  'ext.options': async (id) => {
+    const e = await chrome.management.get(id).catch(() => null);
+    if (e && e.optionsUrl) openTab({ url: e.optionsUrl });
+  },
+  // Ouvrir la fenêtre d'une extension depuis la barre : demande une API du moteur (à venir).
+  'ext.popup': ({ id } = {}) => sendUi('toast', { text: 'Ouvre cette extension depuis sa page d’options pour l’instant : son bouton arrive bientôt dans la barre.' }),
+});
+
+// Bandeau du Chrome Web Store (content/cws.js).
+chrome.runtime.onMessage.addListener((msg, sender, reply) => {
+  if (msg && msg.type === 'cws.state') {
+    chrome.management.get(msg.id).then(() => reply({ installed: true }), () => reply({ installed: false }));
+    return true;
+  }
+  if (msg && msg.type === 'cws.install') {
+    ext.installFromStore(msg.id, sender.tab && sender.tab.id).then(reply);
+    return true;
+  }
+  return false;
+});
+
 // Pages de PouleyPwolu ouvertes en pleine fenêtre (réglages, accueil…).
 export function openPage(name, query = '') {
   openTab({ url: chrome.runtime.getURL('pages/' + name + '.html') + query });
@@ -1021,7 +1062,9 @@ async function start() {
     if (target) activateTab(target.id);
   }
   await applyPrivacy();
+  await refreshExtensions();
   chrome.alarms.create('pouley-menage', { periodInMinutes: 1 });
+  chrome.alarms.create('pouley-extensions', { periodInMinutes: 24 * 60, delayInMinutes: 2 });
   chrome.alarms.create('pouley-focus', { periodInMinutes: 0.25 });
   scheduleBroadcast();
 }
@@ -1032,6 +1075,10 @@ chrome.alarms.onAlarm.addListener(async (a) => {
   await ready;
   if (a.name === 'pouley-menage') housekeeping();
   if (a.name === 'pouley-focus') focusTick();
+  if (a.name === 'pouley-extensions') {
+    const updates = await ext.checkUpdates();
+    for (const u of updates) sendUi('toast', { text: `${u.name} ${u.to} est disponible : ouvre sa page du Chrome Web Store et clique sur « Mettre à jour ».` });
+  }
 });
 
 // Productivité : toutes les 15 s, le site affiché rapporte une plume ou un tender.

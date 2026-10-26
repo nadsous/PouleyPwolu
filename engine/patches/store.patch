@@ -1,0 +1,20 @@
+diff --git a/chrome/browser/extensions/extension_management.cc b/chrome/browser/extensions/extension_management.cc
+index ff2a6fb4a0..c928f830aa 100644
+--- a/chrome/browser/extensions/extension_management.cc
++++ b/chrome/browser/extensions/extension_management.cc
+@@ -321,6 +321,15 @@ bool ExtensionManagement::IsOffstoreInstallAllowed(
+     const GURL& referrer_url) const {
+   const base::CommandLine& command_line =
+       *base::CommandLine::ForCurrentProcess();
++  // PouleyPwolu : comme « always-prompt-for-install » par défaut. Les extensions
++  // du Chrome Web Store (bouton « Ajouter à PouleyPwolu ») s'installent après la
++  // fenêtre de confirmation de Chromium. Une politique d'entreprise qui restreint
++  // les sources d'installation reste appliquée.
++  if (!global_settings_->install_sources.has_value() &&
++      command_line.GetSwitchValueASCII("extension-mime-request-handling") !=
++          "download-as-regular-file") {
++    return true;
++  }
+   if (command_line.HasSwitch("extension-mime-request-handling") &&
+       command_line.GetSwitchValueASCII("extension-mime-request-handling") ==
+       "always-prompt-for-install") {
