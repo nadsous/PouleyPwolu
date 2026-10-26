@@ -1,0 +1,33 @@
+# Généré par scripts/gen-engine-unix-workflows.py à partir de ungoogled-chromium-macos : ne pas modifier.
+# Compile le moteur Chromium de PouleyPwolu pour macOS (Apple Silicon et Intel) sur les machines
+# Mac gratuites de GitHub, en étapes chaînées (moteur-macos-etapes.yml). Compter 1 à 2 jours.
+# Résultat : les artefacts PouleyPwolu_<version>_<arch>-macos.dmg de l'exécution.
+name: moteur-macos
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'moteur-*'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: moteur-macos-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - arch: arm64
+            os: macos-15
+          - arch: x86_64
+            os: macos-15-intel
+      fail-fast: false
+      max-parallel: 2
+    uses: ./.github/workflows/moteur-macos-etapes.yml
+    with:
+      arch: ${{ matrix.arch }}
+      os: ${{ matrix.os }}

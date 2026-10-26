@@ -130,6 +130,8 @@
     body.classList.toggle('side-right', s.sidebarPosition === 'right');
     body.classList.toggle('side-top', s.sidebarPosition === 'top');
     body.classList.toggle('platform-darwin', snap.platform === 'darwin');
+    // Mac et Linux dessinent eux-mêmes les boutons de la fenêtre.
+    body.classList.toggle('platform-linux', snap.platform === 'linux');
     body.classList.toggle('sidebar-collapsed', sidebarHidden());
     if (!resizing) document.documentElement.style.setProperty('--side-w', sideWidth() + 'px');
     const hideBtn = $('#btn-hide-sidebar');
@@ -960,9 +962,9 @@
         { type: 'actions', items: [{ label: 'Ranger mes onglets maintenant', run: () => { closeOverlay(); groupAuto(); } }] },
       ].filter(Boolean);
       case 'apparence': return [
-        chromium ? null : { type: 'choice', set: 'windowMaterial', name: 'verre', label: 'Transparence de la fenêtre', help: 'Avec « Verre dépoli », on voit ce qu’il y a derrière le navigateur, flouté. Les pages web restent bien lisibles.',
+        { type: 'choice', set: 'windowMaterial', name: 'verre', label: 'Transparence de la fenêtre', help: 'Avec « Verre dépoli », on voit ce qu’il y a derrière le navigateur, flouté. Les pages web restent bien lisibles.',
           options: { acrylic: opt('acrylique', 'Verre dépoli', 'On voit derrière'), mica: opt('mica', 'Mica', 'Teinte légère'), none: opt('opaque', 'Opaque', 'Pas de transparence') } },
-        glass && !chromium ? { type: 'range', set: 'chromeOpacity', name: 'opacite', label: 'Opacité du fond', help: 'Plus c’est bas, plus on voit à travers.', def: 0.55,
+        glass ? { type: 'range', set: 'chromeOpacity', name: 'opacite', label: 'Opacité du fond', help: 'Plus c’est bas, plus on voit à travers.', def: 0.55,
           live: (v) => document.documentElement.style.setProperty('--chrome-a', String(v)) } : null,
         { type: 'choice', set: 'theme', name: 'theme', label: 'Thème', help: 'Couleurs de l’interface.',
           options: { nads: opt('nads', 'Sombre', 'Le thème Nads'), light: opt('clair', 'Clair', 'Pour le grand jour') } },

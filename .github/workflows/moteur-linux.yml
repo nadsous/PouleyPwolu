@@ -1,0 +1,29 @@
+# Généré par scripts/gen-engine-unix-workflows.py à partir de ungoogled-chromium-portablelinux : ne pas modifier.
+# Compile le moteur Chromium de PouleyPwolu pour Linux (x86_64 et arm64) sur les machines
+# gratuites de GitHub, dans le conteneur Docker d'ungoogled-chromium (moteur-linux-etapes.yml).
+# Résultat : les artefacts PouleyPwolu-<version>-<arch>.AppImage et _linux.tar.xz.
+name: moteur-linux
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'moteur-*'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: moteur-linux-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        arch: [x86_64, arm64]
+      fail-fast: false
+      max-parallel: 2
+    uses: ./.github/workflows/moteur-linux-etapes.yml
+    with:
+      arch: ${{ matrix.arch }}
+      runs-on: ubuntu-latest

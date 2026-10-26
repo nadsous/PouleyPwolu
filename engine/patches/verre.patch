@@ -1,0 +1,379 @@
+diff --git a/chrome/browser/extensions/api/pouley_private/pouley_private_api.cc b/chrome/browser/extensions/api/pouley_private/pouley_private_api.cc
+index 974e247944..3e71f858df 100644
+--- a/chrome/browser/extensions/api/pouley_private/pouley_private_api.cc
++++ b/chrome/browser/extensions/api/pouley_private/pouley_private_api.cc
+@@ -115,6 +115,14 @@ PouleyPrivateMarkMigrationImportedFunction::Run() {
+   return RespondNow(NoArguments());
+ }
+ 
++ExtensionFunction::ResponseAction
++PouleyPrivateSetWindowMaterialFunction::Run() {
++  auto params = api::pouley_private::SetWindowMaterial::Params::Create(args());
++  EXTENSION_FUNCTION_VALIDATE(params);
++  return RespondNow(
++      WithArguments(pouley::SetWindowMaterial(params->material)));
++}
++
+ ExtensionFunction::ResponseAction PouleyPrivateSetAlwaysOnTopFunction::Run() {
+   auto params = api::pouley_private::SetAlwaysOnTop::Params::Create(args());
+   EXTENSION_FUNCTION_VALIDATE(params);
+diff --git a/chrome/browser/extensions/api/pouley_private/pouley_private_api.h b/chrome/browser/extensions/api/pouley_private/pouley_private_api.h
+index 18bb21f088..fc3f081815 100644
+--- a/chrome/browser/extensions/api/pouley_private/pouley_private_api.h
++++ b/chrome/browser/extensions/api/pouley_private/pouley_private_api.h
+@@ -67,6 +67,16 @@ class PouleyPrivateMarkMigrationImportedFunction : public ExtensionFunction {
+   ResponseAction Run() override;
+ };
+ 
++class PouleyPrivateSetWindowMaterialFunction : public ExtensionFunction {
++ public:
++  DECLARE_EXTENSION_FUNCTION("pouleyPrivate.setWindowMaterial",
++                             POULEYPRIVATE_SETWINDOWMATERIAL)
++
++ protected:
++  ~PouleyPrivateSetWindowMaterialFunction() override = default;
++  ResponseAction Run() override;
++};
++
+ class PouleyPrivateSetAlwaysOnTopFunction : public ExtensionFunction {
+  public:
+   DECLARE_EXTENSION_FUNCTION("pouleyPrivate.setAlwaysOnTop",
+diff --git a/chrome/browser/extensions/extension_view_host.cc b/chrome/browser/extensions/extension_view_host.cc
+index 8664c59cbd..9cf058bed7 100644
+--- a/chrome/browser/extensions/extension_view_host.cc
++++ b/chrome/browser/extensions/extension_view_host.cc
+@@ -10,6 +10,8 @@
+ #include "chrome/browser/file_select_helper.h"
+ #include "chrome/browser/ui/autofill/chrome_autofill_client.h"
+ #include "content/public/browser/file_select_listener.h"
++#include "content/public/browser/render_widget_host_view.h"
++#include "third_party/skia/include/core/SkColor.h"
+ #include "content/public/browser/host_zoom_map.h"
+ #include "content/public/browser/keyboard_event_processing_result.h"
+ #include "content/public/browser/web_contents.h"
+@@ -198,6 +200,11 @@ void ExtensionViewHost::RenderFrameCreated(
+   if (extension_id() == pouley::kPouleyExtensionId) {
+     host_contents()->SetSupportsDraggableRegions(true);
+     pouley::DragRegion::CreateForWebContents(host_contents());
++    // Fond transparent : la page de la barre choisit le sien (verre ou opaque).
++    host_contents()->SetPageBaseBackgroundColor(SK_ColorTRANSPARENT);
++    if (auto* view = host_contents()->GetRenderWidgetHostView()) {
++      view->SetBackgroundColor(SK_ColorTRANSPARENT);
++    }
+   }
+ }
+ 
+diff --git a/chrome/browser/extensions/pouley_dock.h b/chrome/browser/extensions/pouley_dock.h
+index fbb5e2442c..baa31719e3 100644
+--- a/chrome/browser/extensions/pouley_dock.h
++++ b/chrome/browser/extensions/pouley_dock.h
+@@ -44,6 +44,9 @@ std::string RunExtensionAction(BrowserWindowInterface* browser,
+                                const extensions::Extension& extension,
+                                const gfx::Rect& anchor);
+ 
++// Matière de toutes les fenêtres : "acrylic", "mica" ou "none" (Windows 11).
++bool SetWindowMaterial(const std::string& material);
++
+ // Fenêtre toujours au premier plan (onglet flottant).
+ bool SetAlwaysOnTop(BrowserWindowInterface* browser, bool on_top);
+ 
+diff --git a/chrome/browser/extensions/pouley_drag_region.cc b/chrome/browser/extensions/pouley_drag_region.cc
+index 1a5f356f9f..8b21297dcb 100644
+--- a/chrome/browser/extensions/pouley_drag_region.cc
++++ b/chrome/browser/extensions/pouley_drag_region.cc
+@@ -4,7 +4,10 @@
+ 
+ #include "chrome/browser/extensions/pouley_drag_region.h"
+ 
++#include "content/public/browser/render_widget_host_view.h"
++#include "content/public/browser/web_contents.h"
+ #include "third_party/blink/public/mojom/page/draggable_region.mojom.h"
++#include "third_party/skia/include/core/SkColor.h"
+ #include "ui/gfx/geometry/point.h"
+ 
+ namespace pouley {
+@@ -16,6 +19,13 @@ DragRegion::~DragRegion() = default;
+ 
+ void DragRegion::Update(
+     const std::vector<blink::mojom::DraggableRegionPtr>& regions) {
++  // La page de la barre choisit son fond (verre ou opaque) : la vue web, elle,
++  // reste transparente (elle est recréée à chaque chargement de la page).
++  content::WebContents& contents = GetWebContents();
++  contents.SetPageBaseBackgroundColor(SK_ColorTRANSPARENT);
++  if (auto* view = contents.GetRenderWidgetHostView()) {
++    view->SetBackgroundColor(SK_ColorTRANSPARENT);
++  }
+   region_.setEmpty();
+   for (const blink::mojom::DraggableRegionPtr& region : regions) {
+     region_.op(
+diff --git a/chrome/browser/ui/color/chrome_color_mixers.cc b/chrome/browser/ui/color/chrome_color_mixers.cc
+index abb1b795fb..7f749ea7ed 100644
+--- a/chrome/browser/ui/color/chrome_color_mixers.cc
++++ b/chrome/browser/ui/color/chrome_color_mixers.cc
+@@ -22,6 +22,7 @@
+ #include "chrome/browser/ui/color/new_tab_page_color_mixer.h"
+ #include "chrome/browser/ui/color/omnibox_color_mixer.h"
+ #include "chrome/browser/ui/color/product_specifications_color_mixer.h"
++#include "chrome/browser/ui/color/pouley_material.h"
+ #include "chrome/browser/ui/color/tab_strip_color_mixer.h"
+ #include "ui/color/color_id.h"
+ #include "ui/color/color_mixer.h"
+@@ -30,6 +31,22 @@
+ #include "ui/color/color_provider_utils.h"
+ #include "ui/color/color_recipe.h"
+ 
++namespace pouley {
++
++namespace {
++WindowMaterial g_window_material = WindowMaterial::kNone;
++}  // namespace
++
++WindowMaterial GetWindowMaterial() {
++  return g_window_material;
++}
++
++void SetWindowMaterialValue(WindowMaterial material) {
++  g_window_material = material;
++}
++
++}  // namespace pouley
++
+ namespace {
+ 
+ class ChromeColorProviderUtilsCallbacks
+@@ -98,7 +115,11 @@ void AddChromeColorMixers(ui::ColorProvider* provider,
+   if (!key.custom_theme &&
+       key.color_mode == ui::ColorProviderKey::ColorMode::kDark) {
+     ui::ColorMixer& mixer = provider->AddMixer();
+-    const SkColor base = SkColorSetRGB(0x11, 0x11, 0x13);
++    // Mica ou acrylique : rien n'est peint, le verre de Windows apparaît.
++    const SkColor base =
++        pouley::GetWindowMaterial() == pouley::WindowMaterial::kNone
++            ? SkColorSetRGB(0x11, 0x11, 0x13)
++            : SK_ColorTRANSPARENT;
+     mixer[ui::kColorFrameActive] = {base};
+     mixer[ui::kColorFrameInactive] = {base};
+     mixer[kColorToolbar] = {base};
+diff --git a/chrome/browser/ui/color/pouley_material.h b/chrome/browser/ui/color/pouley_material.h
+new file mode 100644
+index 0000000000..9d0bbf9299
+--- /dev/null
++++ b/chrome/browser/ui/color/pouley_material.h
+@@ -0,0 +1,34 @@
++// Copyright 2026 PouleyPwolu
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#ifndef CHROME_BROWSER_UI_COLOR_POULEY_MATERIAL_H_
++#define CHROME_BROWSER_UI_COLOR_POULEY_MATERIAL_H_
++
++#include "build/build_config.h"
++
++#if BUILDFLAG(IS_WIN)
++#include <windows.h>
++#endif
++
++// PouleyPwolu : matière de la fenêtre (réglage « Transparence de la fenêtre »).
++// Avec Mica ou l'acrylique (Windows 11), le cadre, la bande du haut et le panneau
++// latéral ne sont plus peints : le verre de Windows apparaît derrière la barre
++// PouleyPwolu, dont la page est elle-même translucide.
++namespace pouley {
++
++enum class WindowMaterial { kNone = 0, kMica = 1, kAcrylic = 2 };
++
++// Défini dans chrome/browser/ui/color/chrome_color_mixers.cc.
++WindowMaterial GetWindowMaterial();
++void SetWindowMaterialValue(WindowMaterial material);
++
++#if BUILDFLAG(IS_WIN)
++// Pose le verre de Windows (DWM) sur une fenêtre du navigateur. Défini dans
++// chrome/browser/ui/views/frame/browser_desktop_window_tree_host_win.cc.
++void ApplyWindowMaterial(HWND hwnd);
++#endif
++
++}  // namespace pouley
++
++#endif  // CHROME_BROWSER_UI_COLOR_POULEY_MATERIAL_H_
+diff --git a/chrome/browser/ui/views/extensions/pouley_dock.cc b/chrome/browser/ui/views/extensions/pouley_dock.cc
+index 5e4f1f5e78..a2b6bf0137 100644
+--- a/chrome/browser/ui/views/extensions/pouley_dock.cc
++++ b/chrome/browser/ui/views/extensions/pouley_dock.cc
+@@ -18,7 +18,11 @@
+ #include "chrome/browser/extensions/extension_tab_util.h"
+ #include "chrome/browser/extensions/extension_view_host.h"
+ #include "chrome/browser/extensions/extension_view_host_factory.h"
++#include "build/build_config.h"
+ #include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/ui/browser_window/public/global_browser_collection.h"
++#include "chrome/browser/ui/color/pouley_material.h"
++#include "ui/color/color_provider_manager.h"
+ #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
+ #include "chrome/browser/ui/tabs/tab_strip_model.h"
+ #include "chrome/browser/ui/views/extensions/extension_popup.h"
+@@ -40,6 +44,10 @@
+ #include "ui/views/view_class_properties.h"
+ #include "ui/views/widget/widget.h"
+ 
++#if BUILDFLAG(IS_WIN)
++#include "ui/views/win/hwnd_util.h"
++#endif
++
+ namespace pouley {
+ 
+ namespace {
+@@ -231,6 +239,40 @@ std::string RunExtensionAction(BrowserWindowInterface* browser,
+   return "none";
+ }
+ 
++bool SetWindowMaterial(const std::string& material) {
++  const WindowMaterial value = material == "acrylic" ? WindowMaterial::kAcrylic
++                               : material == "mica"  ? WindowMaterial::kMica
++                                                     : WindowMaterial::kNone;
++#if BUILDFLAG(IS_WIN)
++  const bool changed = value != GetWindowMaterial();
++  SetWindowMaterialValue(value);
++  if (changed) {
++    // Les couleurs du cadre et du panneau latéral dépendent de la matière.
++    ui::ColorProviderManager::Get().ResetColorProviderCache();
++  }
++  GlobalBrowserCollection::GetInstance()->ForEach(
++      [changed](BrowserWindowInterface* browser) {
++        BrowserView* browser_view =
++            BrowserView::GetBrowserViewForBrowser(browser);
++        views::Widget* widget =
++            browser_view ? browser_view->GetWidget() : nullptr;
++        if (!widget || !browser_view->GetIsNormalType()) {
++          return true;
++        }
++        ApplyWindowMaterial(views::HWNDForWidget(widget));
++        if (changed) {
++          widget->FrameTypeChanged();
++          widget->ThemeChanged();
++          widget->GetRootView()->SchedulePaint();
++        }
++        return true;
++      });
++  return true;
++#else
++  return value == WindowMaterial::kNone;
++#endif
++}
++
+ bool SetAlwaysOnTop(BrowserWindowInterface* browser, bool on_top) {
+   BrowserView* browser_view =
+       browser ? BrowserView::GetBrowserViewForBrowser(browser) : nullptr;
+diff --git a/chrome/browser/ui/views/frame/browser_desktop_window_tree_host_win.cc b/chrome/browser/ui/views/frame/browser_desktop_window_tree_host_win.cc
+index 49786bd90d..646d715d7a 100644
+--- a/chrome/browser/ui/views/frame/browser_desktop_window_tree_host_win.cc
++++ b/chrome/browser/ui/views/frame/browser_desktop_window_tree_host_win.cc
+@@ -6,6 +6,8 @@
+ 
+ #include <windows.h>
+ 
++#include <dwmapi.h>
++
+ #include <memory>
+ #include <utility>
+ 
+@@ -23,6 +25,7 @@
+ #include "chrome/browser/profiles/profile_manager.h"
+ #include "chrome/browser/themes/theme_service.h"
+ #include "chrome/browser/themes/theme_service_factory.h"
++#include "chrome/browser/ui/color/pouley_material.h"
+ #include "chrome/browser/ui/ui_features.h"
+ #include "chrome/browser/ui/views/frame/browser_frame_view.h"
+ #include "chrome/browser/ui/views/frame/browser_frame_view_win.h"
+@@ -374,6 +377,14 @@ bool BrowserDesktopWindowTreeHostWin::GetDwmFrameInsetsInPixels(
+     return false;
+   }
+ 
++  // PouleyPwolu : avec Mica ou l'acrylique, le verre couvre toute la fenêtre ;
++  // il apparaît là où Chromium ne peint rien (barre, marges autour de la page).
++  if (pouley::GetWindowMaterial() != pouley::WindowMaterial::kNone &&
++      !GetWidget()->IsFullscreen()) {
++    *insets = gfx::Insets(-1);
++    return true;
++  }
++
+   // Don't extend the glass in at all if it won't be visible.
+   *insets = gfx::Insets();
+   return true;
+@@ -385,6 +396,9 @@ void BrowserDesktopWindowTreeHostWin::HandleCreate() {
+   }
+ 
+   DesktopWindowTreeHostWin::HandleCreate();
++  if (browser_view_->GetIsNormalType()) {
++    pouley::ApplyWindowMaterial(GetHWND());
++  }
+   browser_window_property_manager_ =
+       BrowserWindowPropertyManager::CreateBrowserWindowPropertyManager(
+           browser_view_, GetHWND());
+@@ -663,3 +677,20 @@ BrowserDesktopWindowTreeHost::CreateBrowserDesktopWindowTreeHost(
+                                              desktop_native_widget_aura,
+                                              browser_view, browser_widget);
+ }
++
++namespace pouley {
++
++void ApplyWindowMaterial(HWND hwnd) {
++  // Acrylique : DWMSBT_TRANSIENTWINDOW ; Mica : DWMSBT_MAINWINDOW (celui que
++  // Chromium pose déjà, invisible tant que la fenêtre est entièrement peinte).
++  DWM_SYSTEMBACKDROP_TYPE backdrop =
++      GetWindowMaterial() == WindowMaterial::kAcrylic ? DWMSBT_TRANSIENTWINDOW
++                                                      : DWMSBT_MAINWINDOW;
++  DwmSetWindowAttribute(hwnd, DWMWA_SYSTEMBACKDROP_TYPE, &backdrop,
++                        sizeof(backdrop));
++  BOOL dark = TRUE;
++  DwmSetWindowAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE, &dark,
++                        sizeof(dark));
++}
++
++}  // namespace pouley
+diff --git a/chrome/browser/ui/views/frame/browser_frame_view_win.cc b/chrome/browser/ui/views/frame/browser_frame_view_win.cc
+index 3ad02c0e21..b328618eb7 100644
+--- a/chrome/browser/ui/views/frame/browser_frame_view_win.cc
++++ b/chrome/browser/ui/views/frame/browser_frame_view_win.cc
+@@ -532,7 +532,9 @@ int BrowserFrameViewWin::FrameBorderThickness() const {
+ int BrowserFrameViewWin::FrameTopBorderThickness(bool restored) const {
+   const bool is_fullscreen =
+       (browser_widget()->IsFullscreen() || IsMaximized()) && !restored;
+-  if (!is_fullscreen && GetBrowserView()->GetTabStripVisible()) {
++  // PouleyPwolu : pas de bande en haut, la barre et la page montent jusqu'au bord.
++  if (!is_fullscreen && (GetBrowserView()->GetTabStripVisible() ||
++                         IsPouleyWindow(GetBrowserView()))) {
+     // Restored windows have a smaller top resize handle than the system
+     // default. When maximized, the OS sizes the window such that the border
+     // extends beyond the screen edges. In that case, we must return the
+diff --git a/chrome/common/extensions/api/pouley_private.json b/chrome/common/extensions/api/pouley_private.json
+index c9e3555d44..ecb6062cf8 100644
+--- a/chrome/common/extensions/api/pouley_private.json
++++ b/chrome/common/extensions/api/pouley_private.json
+@@ -71,6 +71,16 @@
+           "parameters": []
+         }
+       },
++      {
++        "name": "setWindowMaterial",
++        "type": "function",
++        "description": "Matière des fenêtres : acrylic, mica ou none (Windows 11).",
++        "parameters": [{"name": "material", "type": "string"}],
++        "returns_async": {
++          "name": "callback",
++          "parameters": [{"name": "ok", "type": "boolean"}]
++        }
++      },
+       {
+         "name": "setAlwaysOnTop",
+         "type": "function",
+diff --git a/extensions/browser/extension_function_histogram_value.h b/extensions/browser/extension_function_histogram_value.h
+index b9f929b5d4..0201e8f68a 100644
+--- a/extensions/browser/extension_function_histogram_value.h
++++ b/extensions/browser/extension_function_histogram_value.h
+@@ -2057,6 +2057,7 @@ enum HistogramValue {
+   POULEYPRIVATE_SETALWAYSONTOP = 1992,
+   POULEYPRIVATE_GETMIGRATIONSTATE = 1993,
+   POULEYPRIVATE_MARKMIGRATIONIMPORTED = 1994,
++  POULEYPRIVATE_SETWINDOWMATERIAL = 1995,
+   // Last entry: Add new entries above, then run:
+   // tools/metrics/histograms/update_extension_histograms.py
+   ENUM_BOUNDARY

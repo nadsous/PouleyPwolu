@@ -68,3 +68,6 @@ body:not(.chromium) .chromium-only { display: none !important; }
 .pj-ok { color: #98c379; }
 .pj-err { color: #e06c75; }
 .v-input.mono { font-family: 'JetBrains Mono', monospace; font-size: 12px; }
+
+/* macOS et Linux : la fenêtre garde sa barre de titre et ses boutons, la barre n'en dessine pas. */
+body.platform-linux .winctl { display: none; }

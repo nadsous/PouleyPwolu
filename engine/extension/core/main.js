@@ -17,6 +17,8 @@ const { SEARCH_ENGINES, AI_PROVIDERS, fill, keywordSearch } = self.PouleyConfig;
 const { normalize } = self.PouleyIcons;
 
 export const store = new Store();
+// Système (nom à la manière de Node, comme dans la version Electron) : win32, darwin ou linux.
+const PLATFORM = /Mac OS X/.test(navigator.userAgent) ? 'darwin' : /Windows/.test(navigator.userAgent) ? 'win32' : 'linux';
 const S = () => store.state.settings;
 
 // Onglet PouleyPwolu -> sa vue Chromium.
@@ -636,7 +638,7 @@ function snapshot() {
     split: null,
     repo: null,
     maximized: false,
-    platform: 'win32',
+    platform: PLATFORM,
     chromium: true,
     version: chrome.runtime.getManifest().version,
     versions: { chromium: (navigator.userAgent.match(/Chrome\/([\d.]+)/) || [])[1] || '' },

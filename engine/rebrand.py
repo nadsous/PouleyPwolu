@@ -50,6 +50,26 @@ def copy_icons(src):
     return n
 
 
+def mac_icon_catalog(src):
+    """macOS : Assets.car (icône de l'application) recompilé depuis notre Assets.xcassets.
+    AppIcon.icon (format Icon Composer de Chromium) est retiré : actool le préférerait."""
+    if sys.platform != 'darwin':
+        return False
+    import subprocess
+    mac = src / 'chrome' / 'app' / 'theme' / 'chromium' / 'mac'
+    shutil.rmtree(mac / 'AppIcon.icon', ignore_errors=True)
+    out = mac / 'actool-out'
+    shutil.rmtree(out, ignore_errors=True)
+    out.mkdir()
+    subprocess.run(['xcrun', 'actool', '--compile', str(out), '--platform', 'macosx',
+                    '--minimum-deployment-target', '12.0', '--app-icon', 'AppIcon',
+                    '--output-partial-info-plist', str(out / 'partial.plist'),
+                    str(mac / 'Assets.xcassets')], check=True, stdout=subprocess.DEVNULL)
+    shutil.copyfile(out / 'Assets.car', mac / 'Assets.car')
+    shutil.rmtree(out)
+    return True
+
+
 def copy_extension(src):
     """engine/extension -> chrome/browser/resources/pouley/extension (extension intégrée)."""
     to = src / 'chrome' / 'browser' / 'resources' / 'pouley' / 'extension'
@@ -106,6 +126,8 @@ def main():
     sys.path.insert(0, str(src / 'tools' / 'grit'))
     print(f'Icônes : {copy_icons(src)} fichier(s)')
     print(f'Extension intégrée : {copy_extension(src)} fichier(s)')
+    if mac_icon_catalog(src):
+        print('macOS : Assets.car recompilé')
     for rel in GRDS:
         msgs, xtbs = rebrand_grd(src, rel)
         print(f'{rel} : {msgs} message(s) renommé(s), {xtbs} langue(s)')

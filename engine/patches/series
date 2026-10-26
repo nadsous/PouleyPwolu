@@ -11,3 +11,5 @@ store.patch
 passage-electron.patch
 extensions-barre.patch
 telechargements.patch
+macos.patch
+verre.patch

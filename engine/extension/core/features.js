@@ -315,4 +315,17 @@ Object.assign(commands, {
   },
 });
 
+// Transparence de la fenêtre (Windows 11) : verre de Windows derrière la barre.
+function applyMaterial() {
+  if (P && P.setWindowMaterial) P.setWindowMaterial(S().windowMaterial || 'none').catch(() => {});
+}
+const setSettings = commands['settings.set'];
+commands['settings.set'] = async (patch = {}) => {
+  const r = await setSettings(patch);
+  if ('windowMaterial' in patch) applyMaterial();
+  return r;
+};
+chrome.windows.onCreated.addListener(() => ready.then(applyMaterial));
+
 ready.then(refreshPanel);
+ready.then(applyMaterial);

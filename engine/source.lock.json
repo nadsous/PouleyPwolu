@@ -8,5 +8,15 @@
   "ungoogled": {
     "repository": "https://github.com/ungoogled-software/ungoogled-chromium.git",
     "commit": "c7b4b99027bb6f9f33848fdbee8a319a3ba3b238"
+  },
+  "macos": {
+    "repository": "https://github.com/ungoogled-software/ungoogled-chromium-macos.git",
+    "tag": "155.0.8059.84-1.1",
+    "commit": "28552f14731fe8f60422e19bbc2361468d420b25"
+  },
+  "linux": {
+    "repository": "https://github.com/ungoogled-software/ungoogled-chromium-portablelinux.git",
+    "tag": "155.0.8059.84-1",
+    "commit": "9e6902e95b2a01cc35548c101ff9c38d6c2ec90a"
   }
 }

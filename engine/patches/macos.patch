@@ -1,0 +1,17 @@
+diff --git a/chrome/BUILD.gn b/chrome/BUILD.gn
+index f5cf233e53..e9b82900e6 100644
+--- a/chrome/BUILD.gn
++++ b/chrome/BUILD.gn
+@@ -449,7 +449,11 @@ if (is_win) {
+   group("chrome") {
+     deps = [ ":chrome_app" ]
+ 
+-    data_deps = [ ":chrome_app" ]
++    # PouleyPwolu : extension intégrée, copiée dans le framework à l'empaquetage.
++    data_deps = [
++      ":chrome_app",
++      "//chrome/browser/resources/pouley:extension",
++    ]
+ 
+     if (verify_dynamic_libraries) {
+       deps += [ ":verify_libraries_chrome_app" ]
