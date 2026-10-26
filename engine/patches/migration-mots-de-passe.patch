@@ -1,0 +1,334 @@
+diff --git a/chrome/browser/password_manager/BUILD.gn b/chrome/browser/password_manager/BUILD.gn
+index d90250d7c5..cb1c89f674 100644
+--- a/chrome/browser/password_manager/BUILD.gn
++++ b/chrome/browser/password_manager/BUILD.gn
+@@ -284,6 +284,14 @@ if (!is_android) {
+       "startup_passwords_importer.cc",
+       "startup_passwords_importer.h",
+     ]
++    if (is_win) {
++      # PouleyPwolu : import des mots de passe de la version Electron.
++      sources += [
++        "pouley_migration.cc",
++        "pouley_migration.h",
++      ]
++      libs = [ "crypt32.lib" ]
++    }
+ 
+     deps = [
+       ":password_manager",
+@@ -299,6 +307,7 @@ if (!is_android) {
+       "//components/password_manager/core/browser/password_store:password_store_interface",
+       "//components/password_manager/core/browser/ui",
+       "//content/public/browser",
++      "//crypto",
+     ]
+   }
+ }
+diff --git a/chrome/browser/password_manager/factories/startup_passwords_import_service_factory.cc b/chrome/browser/password_manager/factories/startup_passwords_import_service_factory.cc
+index 2bf458827f..137bd316a1 100644
+--- a/chrome/browser/password_manager/factories/startup_passwords_import_service_factory.cc
++++ b/chrome/browser/password_manager/factories/startup_passwords_import_service_factory.cc
+@@ -7,6 +7,7 @@
+ #include "base/command_line.h"
+ #include "base/logging.h"
+ #include "build/buildflag.h"
++#include "build/build_config.h"
+ #include "chrome/browser/affiliations/affiliation_service_factory.h"
+ #include "chrome/browser/password_manager/factories/account_password_store_factory.h"
+ #include "chrome/browser/password_manager/factories/profile_password_store_factory.h"
+@@ -60,18 +61,27 @@ bool StartupPasswordsImportServiceFactory::ServiceIsCreatedWithBrowserContext()
+     const {
+   // Eagerly create the service *only if* the command line switch is present
+   // AND the channel is Dev or Canary.
++#if BUILDFLAG(IS_WIN)
++  // PouleyPwolu : toujours, pour importer les mots de passe de la version
++  // Electron s'il y en a (le service ne fait rien sinon).
++  return true;
++#else
+   return base::CommandLine::ForCurrentProcess()->HasSwitch(
+              switches::kImportPasswords) &&
+          IsDevOrCanaryOrUnofficialChannel();
++#endif
+ }
+ 
+ std::unique_ptr<KeyedService>
+ StartupPasswordsImportServiceFactory::BuildServiceInstanceForBrowserContext(
+     content::BrowserContext* context) const {
+-  CHECK(base::CommandLine::ForCurrentProcess()->HasSwitch(
+-      switches::kImportPasswords));
++  bool from_switch = base::CommandLine::ForCurrentProcess()->HasSwitch(
++      switches::kImportPasswords);
++#if !BUILDFLAG(IS_WIN)
++  CHECK(from_switch);
++#endif
+ 
+-  if (!IsDevOrCanaryOrUnofficialChannel()) {
++  if (from_switch && !IsDevOrCanaryOrUnofficialChannel()) {
+     LOG(WARNING) << "StartupPasswordsImportService is only available on Dev "
+                     "and Canary channels.";
+     return nullptr;
+diff --git a/chrome/browser/password_manager/pouley_migration.cc b/chrome/browser/password_manager/pouley_migration.cc
+new file mode 100644
+index 0000000000..a5ea5f0e12
+--- /dev/null
++++ b/chrome/browser/password_manager/pouley_migration.cc
+@@ -0,0 +1,127 @@
++// Copyright 2026 PouleyPwolu
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#include "chrome/browser/password_manager/pouley_migration.h"
++
++#include <windows.h>
++
++#include <dpapi.h>
++
++#include <algorithm>
++#include <string_view>
++#include <vector>
++
++#include "base/compiler_specific.h"
++#include "base/containers/span.h"
++#include "base/files/file_path.h"
++#include "base/files/file_util.h"
++#include "base/json/json_reader.h"
++#include "base/logging.h"
++#include "base/path_service.h"
++#include "base/values.h"
++#include "crypto/aead.h"
++
++namespace pouley_migration {
++
++namespace {
++
++constexpr char kEntropy[] = "pouley-migration";
++constexpr char kPasswordsAad[] = "pouley-migration-mdp";
++constexpr size_t kMagic = 4, kIv = 12, kTag = 16;
++
++base::FilePath MigrationDir() {
++  base::FilePath local;
++  if (!base::PathService::Get(base::DIR_LOCAL_APP_DATA, &local)) {
++    return base::FilePath();
++  }
++  return local.Append(L"PouleyPwolu").Append(L"Migration");
++}
++
++// Clé de 32 octets protégée par DPAPI (portée utilisateur) par la 0.1.12.
++std::optional<std::vector<uint8_t>> UnprotectKey(const std::string& blob) {
++  DATA_BLOB in{static_cast<DWORD>(blob.size()),
++               reinterpret_cast<BYTE*>(const_cast<char*>(blob.data()))};
++  DATA_BLOB entropy{static_cast<DWORD>(sizeof(kEntropy) - 1),
++                    reinterpret_cast<BYTE*>(const_cast<char*>(kEntropy))};
++  DATA_BLOB out{};
++  if (!CryptUnprotectData(&in, nullptr, &entropy, nullptr, nullptr,
++                          CRYPTPROTECT_UI_FORBIDDEN, &out)) {
++    return std::nullopt;
++  }
++  // SAFETY: CryptUnprotectData renvoie un tampon de out.cbData octets.
++  std::vector<uint8_t> key(out.pbData, UNSAFE_BUFFERS(out.pbData + out.cbData));
++  SecureZeroMemory(out.pbData, out.cbData);
++  LocalFree(out.pbData);
++  if (key.size() != 32) {
++    return std::nullopt;
++  }
++  return key;
++}
++
++// « PLY1 » | IV (12) | tag GCM (16) | données chiffrées, AES-256-GCM.
++std::optional<std::string> Open(const std::vector<uint8_t>& key,
++                                const std::string& file,
++                                std::string_view aad) {
++  if (file.size() < kMagic + kIv + kTag || file.compare(0, kMagic, "PLY1")) {
++    return std::nullopt;
++  }
++  auto bytes = base::as_byte_span(file);
++  auto iv = bytes.subspan(kMagic, kIv);
++  auto tag = bytes.subspan(kMagic + kIv, kTag);
++  auto data = bytes.subspan(kMagic + kIv + kTag);
++  // BoringSSL attend les données suivies du tag.
++  std::vector<uint8_t> sealed(data.begin(), data.end());
++  sealed.insert(sealed.end(), tag.begin(), tag.end());
++  auto plain = crypto::aead::Open(crypto::aead::AES_256_GCM, key, sealed, iv,
++                                  base::as_byte_span(aad));
++  if (!plain) {
++    return std::nullopt;
++  }
++  return std::string(plain->begin(), plain->end());
++}
++
++}  // namespace
++
++std::optional<std::string> ReadPendingPasswords() {
++  base::FilePath dir = MigrationDir();
++  if (dir.empty()) {
++    return std::nullopt;
++  }
++  std::string manifest_text;
++  if (!base::ReadFileToString(dir.Append(L"manifest.json"), &manifest_text)) {
++    return std::nullopt;  // Pas de migration (cas normal).
++  }
++  std::optional<base::DictValue> manifest =
++      base::JSONReader::ReadDict(manifest_text, base::JSON_PARSE_RFC);
++  const std::string* name =
++      manifest ? manifest->FindString("motsDePasse") : nullptr;
++  if (!manifest || manifest->FindInt("format") != 1 || !name) {
++    return std::nullopt;
++  }
++  std::string key_blob, sealed;
++  if (!base::ReadFileToString(dir.Append(L"cle.dpapi"), &key_blob) ||
++      !base::ReadFileToString(dir.AppendASCII(*name), &sealed)) {
++    return std::nullopt;  // Déjà importés.
++  }
++  std::optional<std::vector<uint8_t>> key = UnprotectKey(key_blob);
++  if (!key) {
++    LOG(ERROR) << "PouleyPwolu : clé de migration illisible.";
++    return std::nullopt;
++  }
++  std::optional<std::string> csv = Open(*key, sealed, kPasswordsAad);
++  std::fill(key->begin(), key->end(), 0);
++  if (!csv) {
++    LOG(ERROR) << "PouleyPwolu : mots de passe de migration illisibles.";
++  }
++  return csv;
++}
++
++void MarkPasswordsImported() {
++  base::FilePath dir = MigrationDir();
++  if (!dir.empty()) {
++    base::DeleteFile(dir.Append(L"mots-de-passe.bin"));
++  }
++}
++
++}  // namespace pouley_migration
+diff --git a/chrome/browser/password_manager/pouley_migration.h b/chrome/browser/password_manager/pouley_migration.h
+new file mode 100644
+index 0000000000..7c382157cb
+--- /dev/null
++++ b/chrome/browser/password_manager/pouley_migration.h
+@@ -0,0 +1,25 @@
++// Copyright 2026 PouleyPwolu
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#ifndef CHROME_BROWSER_PASSWORD_MANAGER_POULEY_MIGRATION_H_
++#define CHROME_BROWSER_PASSWORD_MANAGER_POULEY_MIGRATION_H_
++
++#include <optional>
++#include <string>
++
++// Données laissées par PouleyPwolu 0.1.12 (Electron) dans
++// %LOCALAPPDATA%\PouleyPwolu\Migration au passage sur Chromium. Format décrit
++// dans docs/migration-electron.md du dépôt PouleyPwolu.
++namespace pouley_migration {
++
++// Mots de passe au format CSV de Chrome, déchiffrés, si une migration attend
++// d'être importée. Bloquant (lecture de fichiers, DPAPI) : hors du thread UI.
++std::optional<std::string> ReadPendingPasswords();
++
++// Efface le fichier des mots de passe une fois importés. Bloquant.
++void MarkPasswordsImported();
++
++}  // namespace pouley_migration
++
++#endif  // CHROME_BROWSER_PASSWORD_MANAGER_POULEY_MIGRATION_H_
+diff --git a/chrome/browser/password_manager/startup_passwords_importer.cc b/chrome/browser/password_manager/startup_passwords_importer.cc
+index 3effea3216..8036502f29 100644
+--- a/chrome/browser/password_manager/startup_passwords_importer.cc
++++ b/chrome/browser/password_manager/startup_passwords_importer.cc
+@@ -12,6 +12,7 @@
+ #include "base/logging.h"
+ #include "base/task/task_traits.h"
+ #include "base/task/thread_pool.h"
++#include "build/build_config.h"
+ #include "chrome/browser/affiliations/affiliation_service_factory.h"
+ #include "chrome/browser/password_manager/factories/account_password_store_factory.h"
+ #include "chrome/browser/password_manager/factories/profile_password_store_factory.h"
+@@ -23,6 +24,10 @@
+ #include "components/password_manager/core/browser/password_store/password_store_interface.h"
+ #include "components/password_manager/core/browser/ui/saved_passwords_presenter.h"
+ 
++#if BUILDFLAG(IS_WIN)
++#include "chrome/browser/password_manager/pouley_migration.h"
++#endif
++
+ StartupPasswordsImporter::StartupPasswordsImporter(Profile* profile)
+     : profile_(profile) {
+   affiliations::AffiliationService* affiliation_service =
+@@ -50,6 +55,18 @@ void StartupPasswordsImporter::StartImport() {
+   VLOG(1) << "StartupPasswordsImporter::StartImport called.";
+ 
+   base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
++#if BUILDFLAG(IS_WIN)
++  // PouleyPwolu : sans --import-passwords, on cherche les mots de passe laissés
++  // par la version Electron (lecture et DPAPI hors du thread UI).
++  if (!command_line->HasSwitch(switches::kImportPasswords)) {
++    base::ThreadPool::PostTaskAndReplyWithResult(
++        FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_VISIBLE},
++        base::BindOnce(&pouley_migration::ReadPendingPasswords),
++        base::BindOnce(&StartupPasswordsImporter::OnPouleyPasswordsRead,
++                       weak_ptr_factory_.GetWeakPtr()));
++    return;
++  }
++#endif
+   CHECK(command_line->HasSwitch(switches::kImportPasswords));
+ 
+   base::FilePath csv_file_path =
+@@ -66,8 +83,29 @@ void StartupPasswordsImporter::StartImport() {
+                      base::Unretained(this)));
+ }
+ 
++void StartupPasswordsImporter::OnPouleyPasswordsRead(
++    std::optional<std::string> csv) {
++  if (!csv) {
++    return;
++  }
++  pouley_migration_ = true;
++  // Le CSV reste en mémoire : il n'est jamais écrit en clair sur le disque.
++  password_importer_->Import(
++      std::move(*csv), password_manager::PasswordForm::Store::kProfileStore,
++      base::BindOnce(&StartupPasswordsImporter::OnImportFinished,
++                     base::Unretained(this)));
++}
++
+ void StartupPasswordsImporter::OnImportFinished(
+     const password_manager::ImportResults& results) {
++#if BUILDFLAG(IS_WIN)
++  if (pouley_migration_ &&
++      results.status == password_manager::ImportResults::Status::SUCCESS) {
++    base::ThreadPool::PostTask(
++        FROM_HERE, {base::MayBlock()},
++        base::BindOnce(&pouley_migration::MarkPasswordsImported));
++  }
++#endif
+   VLOG(1) << "Password import finished with status: "
+           << static_cast<int>(results.status);
+ 
+diff --git a/chrome/browser/password_manager/startup_passwords_importer.h b/chrome/browser/password_manager/startup_passwords_importer.h
+index 239d6b1af7..ce64f1c0f0 100644
+--- a/chrome/browser/password_manager/startup_passwords_importer.h
++++ b/chrome/browser/password_manager/startup_passwords_importer.h
+@@ -6,6 +6,8 @@
+ #define CHROME_BROWSER_PASSWORD_MANAGER_STARTUP_PASSWORDS_IMPORTER_H_
+ 
+ #include <memory>
++#include <optional>
++#include <string>
+ 
+ #include "base/memory/raw_ptr.h"
+ #include "base/memory/weak_ptr.h"
+@@ -29,10 +31,14 @@ class StartupPasswordsImporter {
+   void StartImport();
+ 
+  private:
++  // PouleyPwolu : mots de passe laissés par la version Electron, déchiffrés.
++  void OnPouleyPasswordsRead(std::optional<std::string> csv);
++
+   // Callback for when the import process finishes.
+   void OnImportFinished(const password_manager::ImportResults& results);
+ 
+   raw_ptr<Profile> profile_ = nullptr;
++  bool pouley_migration_ = false;
+   std::unique_ptr<password_manager::SavedPasswordsPresenter>
+       saved_passwords_presenter_;
+   std::unique_ptr<password_manager::PasswordImporter> password_importer_;
