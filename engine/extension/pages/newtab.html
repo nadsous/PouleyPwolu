@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <title>Nouvel onglet</title>
+  <link rel="stylesheet" href="pages.css" />
+  <style>
+    body { display: grid; place-items: center; overflow: hidden;
+      background: radial-gradient(80% 60% at 50% 0%, rgba(255, 225, 0, 0.07), transparent 70%), radial-gradient(70% 50% at 50% 100%, rgba(21, 101, 216, 0.1), transparent 70%), var(--panel); }
+    main { width: min(620px, 90vw); text-align: center; margin-top: -6vh; }
+    .poule { width: 104px; height: 104px; margin: 0 auto 18px; animation: bob 2.6s ease-in-out infinite; cursor: pointer; }
+    .poule.peck { animation: peck 0.25s ease-in-out 3; transform-origin: 50% 90%; }
+    @keyframes bob { 50% { transform: translateY(-6px); } }
+    @keyframes peck { 50% { transform: rotate(-16deg); } }
+    h1 { margin: 0; font-size: 30px; color: var(--bright); font-weight: 600; letter-spacing: -0.01em; }
+    .clock { color: var(--muted); margin: 4px 0 26px; font-family: 'JetBrains Mono', monospace; font-size: 13px; }
+    form { display: flex; flex-direction: column; gap: 10px; }
+    .box { display: flex; align-items: center; gap: 10px; height: 56px; padding: 0 8px 0 18px; border-radius: 16px; background: var(--elev); border: 1.5px solid var(--line); transition: border-color 0.2s, box-shadow 0.2s; }
+    .box:focus-within { border-color: var(--yellow); box-shadow: 0 0 0 4px rgba(255, 225, 0, 0.12); }
+    .box svg { width: 20px; height: 20px; fill: none; stroke: var(--muted); stroke-width: 2; stroke-linecap: round; flex: none; }
+    input { flex: 1; height: 100%; background: none; border: 0; outline: none; color: var(--bright); font: 17px 'Onest', sans-serif; }
+    .actions { display: flex; gap: 8px; justify-content: center; }
+    .trust { margin-top: 30px; display: flex; gap: 16px; justify-content: center; flex-wrap: wrap; font-size: 12.5px; color: var(--muted); }
+    .trust span { display: inline-flex; gap: 6px; align-items: center; }
+    .trust i { width: 7px; height: 7px; border-radius: 50%; background: #4ade80; display: inline-block; }
+    .lg { display: inline-grid; width: 18px; height: 18px; }
+    .lg:empty { display: none; }
+    .lg svg { width: 18px; height: 18px; }
+    .btn.primary .lg { background: #fff; border-radius: 6px; padding: 2px; width: 22px; height: 22px; box-sizing: border-box; }
+    .btn.primary .lg svg { width: 18px; height: 18px; }
+    .game { position: fixed; bottom: 16px; right: 18px; font-size: 12.5px; color: var(--muted); text-decoration: none; }
+    .game:hover { color: var(--yellow); }
+  </style>
+</head>
+<body>
+  <main>
+    <div class="poule" id="poule" title="Cot cot !"></div>
+    <h1 id="greet">Bonjour</h1>
+    <div class="clock" id="clock"></div>
+    <form id="f">
+      <label class="box">
+        <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6"/><path d="M20 20l-4.5-4.5"/></svg>
+        <input name="q" id="q" autocomplete="off" autofocus placeholder="Rechercher…" />
+      </label>
+      <div class="actions">
+        <button class="btn primary" type="submit" data-go="search"><span class="lg" id="lg-engine"></span><span id="t-engine">Rechercher</span></button>
+        <button class="btn" type="submit" data-go="search2" id="b-engine2" hidden><span class="lg" id="lg-engine2"></span><span id="t-engine2"></span></button>
+        <button class="btn" type="submit" data-go="ask"><span class="lg" id="lg-ai"></span><span id="t-ai">Demander</span></button>
+      </div>
+    </form>
+    <div class="trust">
+      <span><i></i>Zéro télémétrie</span>
+      <span><i></i>Bouclier anti-traqueurs actif</span>
+      <span><i></i>HTTPS partout</span>
+      <span><i></i>Aucun historique enregistré</span>
+    </div>
+  </main>
+  <a class="game" href="jeu.html">🦊 Jouer à Pouley contre le Renard</a>
+  <script src="../lib/sprites.js"></script>
+  <script src="../lib/brand-logos.js"></script>
+  <script src="../lib/config.js"></script>
+  <script src="newtab.js"></script>
+</body>
+</html>
