@@ -1,13 +1,13 @@
-/* PouleyPwolu dans Chromium : la barre occupe tout le panneau latéral. La page web est
-   affichée par Chromium à côté ; ses boutons réduire / agrandir / fermer sont dessinés par
-   Chromium, ceux de la barre sont masqués. */
+/* PouleyPwolu dans Chromium : la barre occupe tout le panneau latéral, du haut de la
+   fenêtre au bas. La page web est affichée par Chromium à côté. Comme dans la version
+   Electron, la barre dessine les boutons réduire / agrandir / fermer, et ses zones vides
+   (app-region: drag) déplacent la fenêtre (patch interface-sans-titre). */
 body.chromium { --side-w: 100%; }
 body.chromium #app { display: block; }
-body.chromium #sidebar { width: 100%; height: 100vh; padding: 10px 8px 10px 10px; -webkit-app-region: no-drag; }
+body.chromium #sidebar { width: 100%; height: 100vh; padding: 10px 8px 10px 10px; }
 body.chromium #main,
 body.chromium #edge-hot,
 body.chromium #side-resizer,
-body.chromium #winctl,
 body.chromium #btn-hide-sidebar { display: none !important; }
 
 /* Menus contextuels dessinés par la barre (chromium.js). */

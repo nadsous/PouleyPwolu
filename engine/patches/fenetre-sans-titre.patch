@@ -1,0 +1,255 @@
+diff --git a/chrome/browser/extensions/BUILD.gn b/chrome/browser/extensions/BUILD.gn
+index ae90b48d1d..7358ace380 100644
+--- a/chrome/browser/extensions/BUILD.gn
++++ b/chrome/browser/extensions/BUILD.gn
+@@ -337,6 +337,8 @@ source_set("extensions") {
+     "extension_view.h",
+     "extension_view_host.cc",
+     "extension_view_host.h",
++    "pouley_drag_region.cc",
++    "pouley_drag_region.h",
+     "extension_view_host_factory.cc",
+     "extension_view_host_factory.h",
+     "external_component_loader.cc",
+diff --git a/chrome/browser/extensions/extension_view_host.cc b/chrome/browser/extensions/extension_view_host.cc
+index 432a521327..8664c59cbd 100644
+--- a/chrome/browser/extensions/extension_view_host.cc
++++ b/chrome/browser/extensions/extension_view_host.cc
+@@ -5,6 +5,8 @@
+ #include "chrome/browser/extensions/extension_view_host.h"
+ 
+ #include "chrome/browser/extensions/extension_view.h"
++#include "chrome/browser/extensions/pouley_drag_region.h"
++#include "third_party/blink/public/mojom/page/draggable_region.mojom.h"
+ #include "chrome/browser/file_select_helper.h"
+ #include "chrome/browser/ui/autofill/chrome_autofill_client.h"
+ #include "content/public/browser/file_select_listener.h"
+@@ -191,6 +193,20 @@ void ExtensionViewHost::RenderFrameCreated(
+     content::RenderFrameHost* frame_host) {
+   ExtensionHost::RenderFrameCreated(frame_host);
+   view_->RenderFrameCreated(frame_host);
++  // PouleyPwolu : la barre latérale déclare ses zones « app-region: drag »,
++  // qui servent de barre de titre.
++  if (extension_id() == pouley::kPouleyExtensionId) {
++    host_contents()->SetSupportsDraggableRegions(true);
++    pouley::DragRegion::CreateForWebContents(host_contents());
++  }
++}
++
++void ExtensionViewHost::DraggableRegionsChanged(
++    const std::vector<blink::mojom::DraggableRegionPtr>& regions,
++    content::WebContents* contents) {
++  if (auto* drag = pouley::DragRegion::FromWebContents(contents)) {
++    drag->Update(regions);
++  }
+ }
+ 
+ WindowController* ExtensionViewHost::GetExtensionWindowController() {
+diff --git a/chrome/browser/extensions/extension_view_host.h b/chrome/browser/extensions/extension_view_host.h
+index e21d9c7cee..b35fc72d42 100644
+--- a/chrome/browser/extensions/extension_view_host.h
++++ b/chrome/browser/extensions/extension_view_host.h
+@@ -6,6 +6,7 @@
+ #define CHROME_BROWSER_EXTENSIONS_EXTENSION_VIEW_HOST_H_
+ 
+ #include <memory>
++#include <vector>
+ 
+ #include "base/memory/raw_ptr.h"
+ #include "base/scoped_observation.h"
+@@ -13,6 +14,7 @@
+ #include "extensions/browser/extension_host.h"
+ #include "extensions/browser/extension_host_registry.h"
+ #include "extensions/buildflags/buildflags.h"
++#include "third_party/blink/public/mojom/page/draggable_region.mojom-forward.h"
+ 
+ #if !BUILDFLAG(IS_ANDROID)
+ #include "chrome/browser/extensions/extension_view_host_web_modal_handler.h"
+@@ -112,6 +114,9 @@ class ExtensionViewHost
+       content::EyeDropperListener* listener) override;
+   void ResizeDueToAutoResize(content::WebContents* source,
+                              const gfx::Size& new_size) override;
++  void DraggableRegionsChanged(
++      const std::vector<blink::mojom::DraggableRegionPtr>& regions,
++      content::WebContents* contents) override;
+ 
+   // content::WebContentsObserver
+   void RenderFrameCreated(content::RenderFrameHost* frame_host) override;
+diff --git a/chrome/browser/extensions/pouley_drag_region.cc b/chrome/browser/extensions/pouley_drag_region.cc
+new file mode 100644
+index 0000000000..1a5f356f9f
+--- /dev/null
++++ b/chrome/browser/extensions/pouley_drag_region.cc
+@@ -0,0 +1,34 @@
++// Copyright 2026 PouleyPwolu
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#include "chrome/browser/extensions/pouley_drag_region.h"
++
++#include "third_party/blink/public/mojom/page/draggable_region.mojom.h"
++#include "ui/gfx/geometry/point.h"
++
++namespace pouley {
++
++DragRegion::DragRegion(content::WebContents* contents)
++    : content::WebContentsUserData<DragRegion>(*contents) {}
++
++DragRegion::~DragRegion() = default;
++
++void DragRegion::Update(
++    const std::vector<blink::mojom::DraggableRegionPtr>& regions) {
++  region_.setEmpty();
++  for (const blink::mojom::DraggableRegionPtr& region : regions) {
++    region_.op(
++        SkIRect::MakeXYWH(region->bounds.x(), region->bounds.y(),
++                          region->bounds.width(), region->bounds.height()),
++        region->draggable ? SkRegion::kUnion_Op : SkRegion::kDifference_Op);
++  }
++}
++
++bool DragRegion::Contains(const gfx::Point& point) const {
++  return region_.contains(point.x(), point.y());
++}
++
++WEB_CONTENTS_USER_DATA_KEY_IMPL(DragRegion);
++
++}  // namespace pouley
+diff --git a/chrome/browser/extensions/pouley_drag_region.h b/chrome/browser/extensions/pouley_drag_region.h
+new file mode 100644
+index 0000000000..2cfcb1595f
+--- /dev/null
++++ b/chrome/browser/extensions/pouley_drag_region.h
+@@ -0,0 +1,45 @@
++// Copyright 2026 PouleyPwolu
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#ifndef CHROME_BROWSER_EXTENSIONS_POULEY_DRAG_REGION_H_
++#define CHROME_BROWSER_EXTENSIONS_POULEY_DRAG_REGION_H_
++
++#include <vector>
++
++#include "content/public/browser/web_contents_user_data.h"
++#include "third_party/blink/public/mojom/page/draggable_region.mojom-forward.h"
++#include "third_party/skia/include/core/SkRegion.h"
++
++namespace gfx {
++class Point;
++}
++
++namespace pouley {
++
++// Identifiant de l'extension intégrée PouleyPwolu (sa barre latérale).
++inline constexpr char kPouleyExtensionId[] = "dhjkdmdnmjmglljdpbfclbpgphfnapck";
++
++// Zones « app-region: drag » de la barre PouleyPwolu : la fenêtre se déplace en
++// les faisant glisser, comme la barre de titre qu'elles remplacent.
++class DragRegion : public content::WebContentsUserData<DragRegion> {
++ public:
++  ~DragRegion() override;
++
++  void Update(const std::vector<blink::mojom::DraggableRegionPtr>& regions);
++
++  // `point` est en coordonnées de la page de la barre.
++  bool Contains(const gfx::Point& point) const;
++
++ private:
++  explicit DragRegion(content::WebContents* contents);
++  friend class content::WebContentsUserData<DragRegion>;
++
++  SkRegion region_;
++
++  WEB_CONTENTS_USER_DATA_KEY_DECL();
++};
++
++}  // namespace pouley
++
++#endif  // CHROME_BROWSER_EXTENSIONS_POULEY_DRAG_REGION_H_
+diff --git a/chrome/browser/ui/views/frame/browser_frame_view_win.cc b/chrome/browser/ui/views/frame/browser_frame_view_win.cc
+index 5b7aa72031..3ad02c0e21 100644
+--- a/chrome/browser/ui/views/frame/browser_frame_view_win.cc
++++ b/chrome/browser/ui/views/frame/browser_frame_view_win.cc
+@@ -36,6 +36,7 @@
+ #include "chrome/browser/web_applications/web_app_icon_manager.h"
+ #include "chrome/browser/web_applications/web_app_provider.h"
+ #include "chrome/browser/win/titlebar_config.h"
++#include "chrome/browser/extensions/pouley_drag_region.h"
+ #include "content/public/browser/web_contents.h"
+ #include "skia/ext/image_operations.h"
+ #include "ui/base/l10n/l10n_util.h"
+@@ -55,6 +56,7 @@
+ #include "ui/gfx/scoped_canvas.h"
+ #include "ui/gfx/win/icon_util.h"
+ #include "ui/strings/grit/ui_strings.h"
++#include "ui/views/controls/webview/webview.h"
+ #include "ui/views/metadata/view_factory.h"
+ #include "ui/views/widget/widget.h"
+ #include "ui/views/widget/widget_observer.h"
+@@ -165,8 +167,20 @@ bool BrowserFrameViewWin::CaptionButtonsOnLeadingEdge() const {
+   return false;
+ }
+ 
++namespace {
++
++// PouleyPwolu : fenêtre normale = sans barre de titre. La barre latérale
++// PouleyPwolu va jusqu'en haut et dessine elle-même ses boutons de fenêtre.
++bool IsPouleyWindow(BrowserView* browser_view) {
++  return browser_view->browser()->GetType() ==
++         BrowserWindowInterface::Type::TYPE_NORMAL;
++}
++
++}  // namespace
++
+ int BrowserFrameViewWin::GetTopInset(bool restored) const {
+-  if (GetBrowserView()->GetTabStripVisible()) {
++  if (GetBrowserView()->GetTabStripVisible() ||
++      IsPouleyWindow(GetBrowserView())) {
+     return TopAreaHeight(restored);
+   }
+   return TitlebarHeight(restored);
+@@ -336,6 +350,32 @@ int BrowserFrameViewWin::NonClientHitTest(const gfx::Point& point) {
+     if (window_component == HTTOP && !IsMaximized()) {
+       return window_component;
+     }
++    // PouleyPwolu : les zones « app-region: drag » de la barre latérale
++    // déplacent la fenêtre, comme une barre de titre.
++    if (frame_component == HTCLIENT && IsPouleyWindow(GetBrowserView())) {
++      gfx::Point in_widget = point;
++      views::View::ConvertPointToWidget(this, &in_widget);
++      views::View* target =
++          GetWidget()->GetRootView()->GetEventHandlerForPoint(in_widget);
++      for (views::View* v = target; v; v = v->parent()) {
++        auto* web_view = views::AsViewClass<views::WebView>(v);
++        if (!web_view) {
++          continue;
++        }
++        auto* drag = web_view->web_contents()
++                         ? pouley::DragRegion::FromWebContents(
++                               web_view->web_contents())
++                         : nullptr;
++        if (drag) {
++          gfx::Point in_view = in_widget;
++          views::View::ConvertPointFromWidget(web_view, &in_view);
++          if (drag->Contains(in_view)) {
++            return HTCAPTION;
++          }
++        }
++        break;
++      }
++    }
+     return frame_component;
+   }
+ 
+@@ -728,8 +768,9 @@ void BrowserFrameViewWin::LayoutCaptionButtons() {
+   TRACE_EVENT0("views.frame", "BrowserFrameViewWin::LayoutCaptionButtons");
+ 
+   caption_button_container_->SetVisible(
+-      !browser_widget()->IsFullscreen() ||
+-      GetBrowserView()->IsWindowControlsOverlayEnabled());
++      !IsPouleyWindow(GetBrowserView()) &&
++      (!browser_widget()->IsFullscreen() ||
++       GetBrowserView()->IsWindowControlsOverlayEnabled()));
+ 
+   const gfx::Size preferred_size =
+       caption_button_container_->GetPreferredSize();
