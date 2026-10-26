@@ -1,0 +1,43 @@
+diff --git a/chrome/browser/themes/theme_service.cc b/chrome/browser/themes/theme_service.cc
+index cb1dd91e6d..2e42ecf095 100644
+--- a/chrome/browser/themes/theme_service.cc
++++ b/chrome/browser/themes/theme_service.cc
+@@ -314,9 +314,10 @@ void ThemeService::RegisterProfilePrefs(
+       prefs::kDeprecatedBrowserColorSchemeDoNotUse,
+       std::to_underlying(ThemeService::BrowserColorScheme::kSystem),
+       user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
++  // PouleyPwolu : sombre et neutre par défaut, comme l'interface PouleyPwolu.
+   registry->RegisterIntegerPref(
+       prefs::kBrowserColorScheme,
+-      std::to_underlying(ThemeService::BrowserColorScheme::kSystem));
++      std::to_underlying(ThemeService::BrowserColorScheme::kDark));
+   registry->RegisterIntegerPref(
+       prefs::kDeprecatedUserColorDoNotUse, SK_ColorTRANSPARENT,
+       user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
+@@ -331,7 +332,7 @@ void ThemeService::RegisterProfilePrefs(
+   registry->RegisterBooleanPref(
+       prefs::kDeprecatedGrayscaleThemeEnabledDoNotUse, false,
+       user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
+-  registry->RegisterBooleanPref(prefs::kGrayscaleThemeEnabled, false);
++  registry->RegisterBooleanPref(prefs::kGrayscaleThemeEnabled, true);
+   registry->RegisterBooleanPref(prefs::kBrowserFollowsSystemThemeColors,
+                                 BUILDFLAG(IS_CHROMEOS));
+   registry->RegisterBooleanPref(prefs::kSyncingThemePrefsMigratedToNonSyncing,
+diff --git a/chrome/browser/ui/views/frame/browser_view.cc b/chrome/browser/ui/views/frame/browser_view.cc
+index 25d69a0878..2df1d58605 100644
+--- a/chrome/browser/ui/views/frame/browser_view.cc
++++ b/chrome/browser/ui/views/frame/browser_view.cc
+@@ -1415,6 +1415,13 @@ bool BrowserView::ShouldDrawTabStrokes() const {
+ }
+ 
+ bool BrowserView::ShouldDrawTabStrip() const {
++  // PouleyPwolu : la barre d'onglets existe (fenêtre à onglets) mais n'est
++  // jamais dessinée dans une fenêtre normale : la barre latérale PouleyPwolu
++  // la remplace.
++  if (browser_->GetType() == BrowserWindowInterface::Type::TYPE_NORMAL) {
++    return false;
++  }
++
+   // Return false if this window does not normally display a tabstrip or if the
+   // tabstrip is currently hidden, e.g. because we're in fullscreen.
+   if (!WindowFeatureController::From(browser_)->SupportsWindowFeature(
