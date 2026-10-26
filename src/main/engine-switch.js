@@ -180,7 +180,16 @@ class EngineSwitch {
       await this.beforeQuit();
       // --migration indique à l'installateur d'où vient l'utilisateur ; /S : sans questions
       // (l'utilisateur vient d'accepter le passage).
-      spawn(file, ['/S', '--migration=' + DIR], { detached: true, stdio: 'ignore', windowsHide: true }).unref();
+      // L'installateur de Chromium n'ouvre pas toujours le navigateur à la fin : un petit
+      // script attend la fin de l'installation puis ouvre PouleyPwolu (s'il n'est pas déjà ouvert).
+      const q = (s) => "'" + String(s).replace(/'/g, "''") + "'";
+      const chromeExe = path.join(process.env.LOCALAPPDATA || '', 'PouleyPwolu', 'Application', 'chrome.exe');
+      const script = [
+        `Start-Process -FilePath ${q(file)} -ArgumentList '/S', ${q('--migration=' + DIR)} -Wait`,
+        `if ((Test-Path ${q(chromeExe)}) -and -not (Get-Process chrome -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq ${q(chromeExe)} })) { Start-Process -FilePath ${q(chromeExe)} }`,
+      ].join('; ');
+      spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-WindowStyle', 'Hidden', '-Command', script],
+        { detached: true, stdio: 'ignore', windowsHide: true }).unref();
       setTimeout(() => app.quit(), 500);
       return { ok: true, counts };
     } catch (err) {
