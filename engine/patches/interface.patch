@@ -23,8 +23,44 @@ index cb1dd91e6d..2e42ecf095 100644
    registry->RegisterBooleanPref(prefs::kBrowserFollowsSystemThemeColors,
                                  BUILDFLAG(IS_CHROMEOS));
    registry->RegisterBooleanPref(prefs::kSyncingThemePrefsMigratedToNonSyncing,
+diff --git a/chrome/browser/ui/color/chrome_color_mixers.cc b/chrome/browser/ui/color/chrome_color_mixers.cc
+index 8432f49468..abb1b795fb 100644
+--- a/chrome/browser/ui/color/chrome_color_mixers.cc
++++ b/chrome/browser/ui/color/chrome_color_mixers.cc
+@@ -23,7 +23,12 @@
+ #include "chrome/browser/ui/color/omnibox_color_mixer.h"
+ #include "chrome/browser/ui/color/product_specifications_color_mixer.h"
+ #include "chrome/browser/ui/color/tab_strip_color_mixer.h"
++#include "ui/color/color_id.h"
++#include "ui/color/color_mixer.h"
++#include "ui/color/color_provider.h"
++#include "ui/color/color_provider_key.h"
+ #include "ui/color/color_provider_utils.h"
++#include "ui/color/color_recipe.h"
+ 
+ namespace {
+ 
+@@ -88,6 +93,18 @@ void AddChromeColorMixers(ui::ColorProvider* provider,
+   // Must be the last one in order to override other mixer colors.
+   AddNativeChromeColorMixer(provider, key);
+ 
++  // PouleyPwolu : fenêtre, bande du haut, cadre de la page et panneau latéral à
++  // la couleur de la barre PouleyPwolu (#111113), sauf thème personnalisé.
++  if (!key.custom_theme &&
++      key.color_mode == ui::ColorProviderKey::ColorMode::kDark) {
++    ui::ColorMixer& mixer = provider->AddMixer();
++    const SkColor base = SkColorSetRGB(0x11, 0x11, 0x13);
++    mixer[ui::kColorFrameActive] = {base};
++    mixer[ui::kColorFrameInactive] = {base};
++    mixer[kColorToolbar] = {base};
++    mixer[kColorSidePanelBackground] = {base};
++  }
++
+   if (key.custom_theme) {
+     key.custom_theme->AddColorMixers(provider, key);
+   }
 diff --git a/chrome/browser/ui/views/frame/browser_view.cc b/chrome/browser/ui/views/frame/browser_view.cc
-index 25d69a0878..2df1d58605 100644
+index 25d69a0878..5d1d29aa3e 100644
 --- a/chrome/browser/ui/views/frame/browser_view.cc
 +++ b/chrome/browser/ui/views/frame/browser_view.cc
 @@ -1415,6 +1415,13 @@ bool BrowserView::ShouldDrawTabStrokes() const {
@@ -41,3 +77,84 @@ index 25d69a0878..2df1d58605 100644
    // Return false if this window does not normally display a tabstrip or if the
    // tabstrip is currently hidden, e.g. because we're in fullscreen.
    if (!WindowFeatureController::From(browser_)->SupportsWindowFeature(
+@@ -3013,6 +3020,10 @@ void BrowserView::MaybeShowReadingListInSidePanelIPH() {
+ }
+ 
+ bool BrowserView::IsBookmarkBarVisible() const {
++  // PouleyPwolu : les favoris sont dans la barre latérale.
++  if (browser_->GetType() == BrowserWindowInterface::Type::TYPE_NORMAL) {
++    return false;
++  }
+   if (!WindowFeatureController::From(browser_)->SupportsWindowFeature(
+           WindowFeatureController::WindowFeature::kFeatureBookmarkBar)) {
+     return false;
+@@ -3063,6 +3074,12 @@ bool BrowserView::IsToolbarVisible() const {
+   }
+ #endif
+ 
++  // PouleyPwolu : pas de barre d'outils dans une fenêtre normale. L'adresse et
++  // les boutons de navigation sont dans la barre latérale PouleyPwolu.
++  if (browser_->GetType() == BrowserWindowInterface::Type::TYPE_NORMAL) {
++    return false;
++  }
++
+   // It's possible to reach here before we've been notified of being added to a
+   // widget, so |toolbar_| is still null.  Return false in this case so callers
+   // don't assume they can access the toolbar yet.
+diff --git a/chrome/browser/ui/views/frame/layout/browser_view_tabbed_layout_impl.cc b/chrome/browser/ui/views/frame/layout/browser_view_tabbed_layout_impl.cc
+index 29dfbde914..485330f2d4 100644
+--- a/chrome/browser/ui/views/frame/layout/browser_view_tabbed_layout_impl.cc
++++ b/chrome/browser/ui/views/frame/layout/browser_view_tabbed_layout_impl.cc
+@@ -1049,10 +1049,9 @@ BrowserViewTabbedLayoutImpl::CalculateProposedLayout(
+     // accommodate the panel.
+     const int scaled_main_area_padding = base::ClampRound(
+         side_panel_reveal_amount * horizontal_layout.side_panel_padding);
+-    const int scaled_top_padding =
+-        layout_data_->separator_info.side_panel_top_padding
+-            ? scaled_main_area_padding
+-            : views::Separator::kThickness;
++    // PouleyPwolu : la page a la même marge en haut que sur les côtés, dans un
++    // cadre arrondi, comme dans la version Electron.
++    const int scaled_top_padding = scaled_main_area_padding;
+     shadow_overlay_insets = gfx::Insets::TLBR(
+         scaled_top_padding, side_panel_leading ? 0 : scaled_main_area_padding,
+         scaled_main_area_padding,
+diff --git a/chrome/browser/ui/views/side_panel/side_panel.cc b/chrome/browser/ui/views/side_panel/side_panel.cc
+index ab8999f84d..8b6f1d0953 100644
+--- a/chrome/browser/ui/views/side_panel/side_panel.cc
++++ b/chrome/browser/ui/views/side_panel/side_panel.cc
+@@ -72,13 +72,15 @@ constexpr BrowserAnimationGroup kAnimationGroup =
+ 
+ // This thickness includes the solid-color background and the inner round-rect
+ // border-color stroke. It does not include the outer-color separator.
++// PouleyPwolu : pas de cadre autour du panneau latéral, la barre PouleyPwolu
++// va d'un bord à l'autre.
+ int GetBorderThickness() {
+-  return 8 + views::Separator::kThickness;
++  return 0;
+ }
+ 
+ // This is how many units of the toolbar are essentially expected to be
+ // background.
+-constexpr int kOverlapFromToolbar = 4;
++constexpr int kOverlapFromToolbar = 0;
+ 
+ // We want the border to visually look like GetBorderThickness() units on all
+ // sides except the top. On the top side, background is drawn on top of the
+diff --git a/chrome/browser/ui/views/side_panel/side_panel_coordinator.cc b/chrome/browser/ui/views/side_panel/side_panel_coordinator.cc
+index f65b51ef5e..0c9ec40d3d 100644
+--- a/chrome/browser/ui/views/side_panel/side_panel_coordinator.cc
++++ b/chrome/browser/ui/views/side_panel/side_panel_coordinator.cc
+@@ -274,7 +274,11 @@ void SidePanelCoordinator::PopulateSidePanel(
+ 
+   side_panel->UpdateHorizontalAlignment(entry->key().id());
+ 
+-  if (entry->should_show_header()) {
++  // PouleyPwolu : la barre latérale PouleyPwolu n'a pas d'en-tête (titre,
++  // épingle, fermer) : elle remplace la barre d'onglets.
++  const bool pouley_bar =
++      entry->key().extension_id() == "dhjkdmdnmjmglljdpbfclbpgphfnapck";
++  if (entry->should_show_header() && !pouley_bar) {
+     side_panel->AddHeaderView(std::make_unique<SidePanelHeader>(
+         std::make_unique<SidePanelHeaderController>(
+             &*browser_, side_panel_toolbar_pinning_controller_.get(), entry)));
