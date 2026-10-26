@@ -85,13 +85,27 @@ L'algorithme est AES-256-GCM.
 
 Seules les adresses `http(s)` sont gardées. Les onglets éphémères ne sont pas exportés.
 
-## Côté Chromium (à faire)
+## Côté Chromium
 
-Un patch lit le dossier au démarrage du profil :
+**Mots de passe (fait)** : `engine/patches/migration-mots-de-passe.patch`.
 
-1. `CryptUnprotectData` sur la clé, puis déchiffrement en mémoire.
-2. Import du CSV avec `password_manager::PasswordImporter::Import(std::string csv_data, …)`
-   (Chromium 155). Le CSV déchiffré reste en mémoire et n'est jamais écrit en clair sur le
-   disque.
-3. Création des espaces et des onglets.
-4. Effacement de `mots-de-passe.bin` et `cle.dpapi`.
+Au démarrage du profil, l'import de mots de passe déjà présent dans Chromium 155
+(`StartupPasswordsImporter`) cherche le dossier. Si le dossier n'existe pas, il ne fait rien.
+S'il le trouve :
+
+1. Il ouvre la clé avec `CryptUnprotectData`.
+2. Il déchiffre `mots-de-passe.bin` en mémoire.
+3. Il passe le CSV à `PasswordImporter::Import(std::string csv_data, …)` : rien n'est écrit en
+   clair sur le disque.
+4. Une fois l'import réussi, il efface `mots-de-passe.bin`.
+
+`cle.dpapi` et `etat.bin` restent pour l'import des favoris et des poulaillers.
+
+Testé avec un dossier écrit par le code de la 0.1.12. Les deux identifiants ont été importés,
+dont un mot de passe avec virgule, guillemets et retour à la ligne.
+
+**À faire** :
+
+- Favoris et poulaillers (`etat.bin`), d'abord sous forme de dossiers de favoris.
+- Liste des extensions à réinstaller.
+- Effacement du dossier une fois tout importé.
