@@ -54,6 +54,22 @@ if ($ours) {
   [IO.File]::WriteAllText($series, $text, $utf8)
 }
 
+# Nom et icônes : engine\rebrand.py tourne juste après les patches et la substitution de
+# domaines. On le copie dans ucw\pouley et on ajoute son appel dans build.py.
+$rb = "$ucw\pouley"
+if (Test-Path $rb) { Remove-Item $rb -Recurse -Force }
+New-Item -ItemType Directory -Force $rb | Out-Null
+Copy-Item "$root\engine\rebrand.py" $rb
+Copy-Item "$root\engine\branding" "$rb\branding" -Recurse
+$buildPy = "$ucw\build.py"
+$py = [IO.File]::ReadAllText($buildPy)
+$anchor = "            None`n        )`n"
+if ($py.IndexOf($anchor) -lt 0) { throw "build.py : point d'insertion du renommage introuvable" }
+$call = $anchor + "        # PouleyPwolu : nom et icônes (ajouté par scripts/prepare.ps1)`n" +
+  "        subprocess.run([sys.executable, str(_ROOT_DIR / 'pouley' / 'rebrand.py'), str(source_tree)], check=True)`n"
+$i = $py.IndexOf($anchor)
+[IO.File]::WriteAllText($buildPy, $py.Substring(0, $i) + $call + $py.Substring($i + $anchor.Length), $utf8)
+
 # Réglages GN : ajoutés après ceux de Windows, la dernière valeur l'emporte.
 $flags = "$ucw\flags.windows.gn"
 $text = [IO.File]::ReadAllText($flags).TrimEnd("`r", "`n") + "`n`n" + ([IO.File]::ReadAllText("$root\engine\flags.gn") -replace "`r`n", "`n")

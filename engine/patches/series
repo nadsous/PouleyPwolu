@@ -1,3 +1,4 @@
 # Patches PouleyPwolu, appliqués après ceux d'ungoogled-chromium et de Windows.
 # Un chemin par ligne, relatif à ce dossier, dans l'ordre d'application.
 # Les lignes vides et celles qui commencent par # sont ignorées.
+identite.patch

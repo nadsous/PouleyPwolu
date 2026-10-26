@@ -1,0 +1,117 @@
+diff --git a/chrome/app/theme/chromium/BRANDING b/chrome/app/theme/chromium/BRANDING
+index f8363d5b29..e59ba28faa 100644
+--- a/chrome/app/theme/chromium/BRANDING
++++ b/chrome/app/theme/chromium/BRANDING
+@@ -1,10 +1,10 @@
+-COMPANY_FULLNAME=The Chromium Authors
+-COMPANY_SHORTNAME=The Chromium Authors
+-PRODUCT_FULLNAME=Chromium
+-PRODUCT_SHORTNAME=Chromium
+-PRODUCT_INSTALLER_FULLNAME=Chromium Installer
+-PRODUCT_INSTALLER_SHORTNAME=Chromium Installer
+-COPYRIGHT=Copyright @LASTCHANGE_YEAR@ The Chromium Authors. All rights reserved.
+-MAC_BUNDLE_ID=org.chromium.Chromium
++COMPANY_FULLNAME=PouleyPwolu
++COMPANY_SHORTNAME=PouleyPwolu
++PRODUCT_FULLNAME=PouleyPwolu
++PRODUCT_SHORTNAME=PouleyPwolu
++PRODUCT_INSTALLER_FULLNAME=PouleyPwolu Installer
++PRODUCT_INSTALLER_SHORTNAME=PouleyPwolu Installer
++COPYRIGHT=Copyright @LASTCHANGE_YEAR@ PouleyPwolu et The Chromium Authors.
++MAC_BUNDLE_ID=site.nads.pouleypwolu
+ MAC_CREATOR_CODE=Cr24
+ MAC_TEAM_ID=
+diff --git a/chrome/install_static/chromium_install_modes.h b/chrome/install_static/chromium_install_modes.h
+index a6d969df56..1568705587 100644
+--- a/chrome/install_static/chromium_install_modes.h
++++ b/chrome/install_static/chromium_install_modes.h
+@@ -21,10 +21,10 @@ inline constexpr wchar_t kCompanyPathName[] = L"";
+ 
+ // The brand-specific product name to be included as a component of the install
+ // and user data directory paths.
+-inline constexpr wchar_t kProductPathName[] = L"Chromium";
++inline constexpr wchar_t kProductPathName[] = L"PouleyPwolu";
+ 
+ // The brand-specific safe browsing client name.
+-inline constexpr char kSafeBrowsingName[] = "chromium";
++inline constexpr char kSafeBrowsingName[] = "pouleypwolu";
+ 
+ // Note: This list of indices must be kept in sync with the brand-specific
+ // resource strings in chrome/installer/util/prebuild/create_string_rc.
+@@ -54,28 +54,28 @@ inline constexpr auto kInstallModes = std::to_array<InstallConstants>({
+         .logo_suffix = L"",  // No logo suffix for the primary install mode.
+         .app_guid =
+             L"",  // Empty app_guid since no integration with Google Update.
+-        .base_app_name = L"Chromium",              // A distinct base_app_name.
+-        .base_app_id = L"Chromium",                // A distinct base_app_id.
+-        .browser_prog_id_prefix = L"ChromiumHTM",  // Browser ProgID prefix.
++        .base_app_name = L"PouleyPwolu",           // A distinct base_app_name.
++        .base_app_id = L"PouleyPwolu",             // A distinct base_app_id.
++        .browser_prog_id_prefix = L"PouleyPwoluHTML",  // ProgID de la version Electron.
+         .browser_prog_id_description =
+-            L"Chromium HTML Document",  // Browser ProgID description.
+-        .direct_launch_url_scheme = "chromium",
+-        .pdf_prog_id_prefix = L"ChromiumPDF",  // PDF ProgID prefix.
++            L"PouleyPwolu HTML Document",  // Browser ProgID description.
++        .direct_launch_url_scheme = "pouleypwolu",
++        .pdf_prog_id_prefix = L"PouleyPwoluPDF",  // PDF ProgID prefix.
+         .pdf_prog_id_description =
+-            L"Chromium PDF Document",  // PDF ProgID description.
++            L"PouleyPwolu PDF Document",  // PDF ProgID description.
+         .active_setup_guid =
+-            L"{7D2B3E1D-D096-4594-9D8F-A6667F12E0AC}",  // Active Setup
++            L"{1461196C-285F-4340-9174-B9B44D4D12E9}",  // Active Setup
+                                                         // GUID.
+-        .toast_activator_clsid = {0x635EFA6F,
+-                                  0x08D6,
+-                                  0x4EC9,
+-                                  {0xBD, 0x14, 0x8A, 0x0F, 0xDE, 0x97, 0x51,
+-                                   0x59}},  // Toast Activator CLSID.
+-        .elevator_clsid = {0xD133B120,
+-                           0x6DB4,
+-                           0x4D6B,
+-                           {0x8B, 0xFE, 0x83, 0xBF, 0x8C, 0xA1, 0xB1,
+-                            0xB0}},  // Elevator CLSID.
++        .toast_activator_clsid = {0x47C65329,
++                                  0x0A34,
++                                  0x4FD6,
++                                  {0xB0, 0x7B, 0x04, 0x91, 0x16, 0x30, 0x53,
++                                   0x6F}},  // Toast Activator CLSID.
++        .elevator_clsid = {0xC86A6B57,
++                           0x3299,
++                           0x48D8,
++                           {0x8B, 0x03, 0x00, 0xB8, 0xBB, 0x7A, 0xDA,
++                            0xE0}},  // Elevator CLSID.
+         .elevator_iid = {0xbb19a0e5,
+                          0xc6,
+                          0x4966,
+@@ -83,11 +83,11 @@ inline constexpr auto kInstallModes = std::to_array<InstallConstants>({
+                           0x3a}},  // IElevator IID and TypeLib
+         // {BB19A0E5-00C6-4966-94B2-5AFEC6FED93A}.
+         .old_elevator_iids = {},
+-        .tracing_service_clsid = {0x83f69367,
+-                                  0x442d,
+-                                  0x447f,
+-                                  {0x8b, 0xcc, 0x0e, 0x3f, 0x97, 0xbe, 0x9c,
+-                                   0xf2}},  // SystemTraceSession CLSID.
++        .tracing_service_clsid = {0x12EF1FF3,
++                                  0xD721,
++                                  0x4AA9,
++                                  {0xA2, 0xBC, 0xA0, 0xBE, 0x56, 0x8A, 0x24,
++                                   0x7F}},  // SystemTraceSession CLSID.
+         .tracing_service_iid = {0xe0b03e2d,
+                                 0x7682,
+                                 0x4d83,
+@@ -109,9 +109,9 @@ inline constexpr auto kInstallModes = std::to_array<InstallConstants>({
+         .pdf_doc_icon_resource_index =
+             icon_resources::kPDFDocIndex,  // PDF doc icon resource index.
+         .sandbox_sid_prefix =
+-            L"S-1-15-2-3251537155-1984446955-2931258699-841473695-"
+-            L"1938553385-"
+-            L"924012148-",  // App container sid prefix for sandbox.
++            L"S-1-15-2-4272745221-3444772789-3015648545-585713626-"
++            L"922476262-"
++            L"4099131710-",  // App container sid prefix for sandbox.
+     },
+ });
+ 
