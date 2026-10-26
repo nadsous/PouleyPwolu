@@ -39,7 +39,8 @@
     "contentSettings",
     "downloads.open",
     "pouleyPrivate",
-    "processes"
+    "processes",
+    "history"
   ],
   "host_permissions": [
     "<all_urls>"
@@ -79,12 +80,27 @@
         "content/probes.js"
       ],
       "run_at": "document_start"
+    },
+    {
+      "matches": [
+        "http://*/*",
+        "https://*/*",
+        "file:///*"
+      ],
+      "js": [
+        "lib/json-view.js",
+        "content/json-viewer.js"
+      ],
+      "run_at": "document_end"
     }
   ],
   "web_accessible_resources": [
     {
       "resources": [
-        "sidebar/index.html"
+        "sidebar/index.html",
+        "sidebar/Onest-Regular.ttf",
+        "sidebar/Onest-SemiBold.ttf",
+        "sidebar/JetBrainsMono-Regular.ttf"
       ],
       "matches": [
         "<all_urls>"

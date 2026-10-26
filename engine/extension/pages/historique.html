@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <title>Historique</title>
+  <link rel="stylesheet" href="pages.css" />
+  <link rel="stylesheet" href="dev.css" />
+</head>
+<body>
+  <header class="top">
+    <h1>Historique <span class="tag">chrome.history</span></h1>
+    <label class="search"><input id="q" placeholder="Rechercher un titre, une adresse… (site:github.com)" spellcheck="false" autofocus /><kbd>/</kbd></label>
+    <span class="grow"></span>
+    <button class="btn sm" id="clear-hour">Effacer la dernière heure</button>
+    <button class="btn sm" id="clear-day">Effacer aujourd’hui</button>
+    <button class="btn sm danger" id="clear-all">Tout effacer</button>
+  </header>
+  <main class="list">
+    <div class="stats" id="stats"></div>
+    <div id="list"></div>
+    <div class="empty" id="empty" hidden><b>Rien ici</b>Les pages que tu visites apparaissent ici. Elles restent sur ta machine.</div>
+  </main>
+  <div class="toast" id="toast"></div>
+  <script src="historique.js"></script>
+</body>
+</html>

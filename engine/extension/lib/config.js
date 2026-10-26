@@ -39,9 +39,19 @@
     return k ? { key: m[1].toLowerCase(), ...k, query: m[2], target: fill(k.url, m[2]) } : null;
   }
 
+  // Moteur personnalisé (Paramètres › Recherche) : une adresse avec %s.
+  function withCustomEngine(settings) {
+    const url = settings && settings.customSearchUrl;
+    if (typeof url === 'string' && /^https?:\/\/\S+%s/.test(url)) {
+      SEARCH_ENGINES.perso = { label: (settings.customSearchName || '').trim() || 'Mon moteur', url, note: 'Ton moteur' };
+    } else {
+      delete SEARCH_ENGINES.perso;
+    }
+  }
+
   function fill(template, q) {
     return template.replace('%s', encodeURIComponent(q));
   }
 
-  return { SEARCH_ENGINES, AI_PROVIDERS, POULAILLER_COLORS, KEYWORDS, REPO_SHORT, keywordSearch, fill };
+  return { SEARCH_ENGINES, AI_PROVIDERS, POULAILLER_COLORS, KEYWORDS, REPO_SHORT, keywordSearch, fill, withCustomEngine };
 });

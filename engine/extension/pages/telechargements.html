@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <title>Téléchargements</title>
+  <link rel="stylesheet" href="pages.css" />
+  <link rel="stylesheet" href="dev.css" />
+  <style>
+    .row { grid-template-columns: 40px minmax(0, 1fr) auto; }
+    .row .ic { width: 32px; height: 32px; border-radius: 8px; display: grid; place-items: center; background: var(--panel); }
+    .row .ic img { width: 24px; height: 24px; border-radius: 0; }
+    .bar { height: 4px; border-radius: 4px; background: var(--elev); margin-top: 6px; overflow: hidden; }
+    .bar i { display: block; height: 100%; background: var(--yellow); border-radius: 4px; transition: width 0.3s; }
+    .row.done .title { color: var(--bright); }
+    .row.gone .title { color: var(--muted); text-decoration: line-through; }
+    .row .chip.st { --h: var(--yellow); }
+    .row.done .chip.st { --h: #98c379; }
+    .row.gone .chip.st { --h: var(--muted); }
+    .row.fail .chip.st { --h: var(--red); }
+    .row .acts { display: flex; gap: 4px; }
+    .row .acts .btn { height: 28px; padding: 0 10px; font-size: 12px; border-radius: 8px; }
+  </style>
+</head>
+<body>
+  <header class="top">
+    <h1>Téléchargements <span class="tag">chrome.downloads</span></h1>
+    <label class="search"><input id="q" placeholder="Rechercher un fichier, un site…" spellcheck="false" autofocus /><kbd>/</kbd></label>
+    <span class="grow"></span>
+    <button class="btn sm" id="folder">Ouvrir le dossier</button>
+    <button class="btn sm danger" id="clear">Vider la liste</button>
+  </header>
+  <main class="list">
+    <div class="stats" id="stats"></div>
+    <div id="list"></div>
+    <div class="empty" id="empty" hidden><b>Aucun téléchargement</b>Tes fichiers apparaissent ici, et dans la barre pendant qu’ils arrivent.</div>
+  </main>
+  <div class="toast" id="toast"></div>
+  <script src="telechargements.js"></script>
+</body>
+</html>

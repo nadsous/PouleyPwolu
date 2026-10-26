@@ -46,3 +46,25 @@ body.panel-inspector #workspace { height: 100%; }
 body.panel-inspector #inspector { flex: 1; width: auto; height: 100%; border-radius: 12px; animation: none; }
 body.panel-aid #main { display: none !important; }
 body.panel-aid .overlay { position: fixed; inset: 0; }
+
+/* Boutons propres à la version Chromium (historique, téléchargements). */
+body:not(.chromium) .chromium-only { display: none !important; }
+
+/* pouley.json : éditeur des réglages en JSON coloré (lib/json-view.js). */
+.pj { display: flex; flex-direction: column; height: 100%; min-height: 420px; padding: 14px 18px 12px; gap: 10px; }
+.pj-tools { display: flex; gap: 6px; flex-wrap: wrap; }
+.pj-tools .btn { height: 30px; font-size: 12px; }
+.pj-area { flex: 1; min-height: 0; display: flex; border: 1px solid var(--line); border-radius: 10px; background: color-mix(in srgb, var(--base) 70%, transparent); overflow: hidden; }
+.pj.bad .pj-area { border-color: color-mix(in srgb, #e06c75 60%, transparent); }
+.pj .pj-gut { flex: none; width: 46px; overflow: hidden; padding: 10px 8px 10px 0; text-align: right; font: 12.5px/1.75 'JetBrains Mono', monospace; color: color-mix(in srgb, var(--muted) 60%, transparent); user-select: none; }
+.pj-gut span { display: block; }
+.pj-gut span.err { color: #e06c75; font-weight: 700; }
+.pj-scroll { position: relative; flex: 1; min-width: 0; }
+.pj .pj-hl, .pj .pj-ta { position: absolute; inset: 0; margin: 0; padding: 10px 12px; font: 12.5px/1.75 'JetBrains Mono', monospace; white-space: pre; overflow: auto; tab-size: 2; }
+.pj-hl { pointer-events: none; overflow: hidden; }
+.pj-ta { resize: none; border: 0; outline: none; background: transparent; color: transparent; caret-color: var(--yellow, #ffe100); }
+.pj-ta::selection { background: rgba(97, 175, 239, 0.3); color: transparent; }
+.pj-status { font: 12px 'JetBrains Mono', monospace; }
+.pj-ok { color: #98c379; }
+.pj-err { color: #e06c75; }
+.v-input.mono { font-family: 'JetBrains Mono', monospace; font-size: 12px; }

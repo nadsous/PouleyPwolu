@@ -6,6 +6,7 @@ import './core/inspect.js';
 import './core/system.js';
 import './core/tools.js';
 import './core/features.js';
+import './core/dev.js';
 
 // La barre PouleyPwolu remplace la barre d'onglets : elle s'ouvre dans chaque fenêtre
 // normale (le moteur l'autorise sans clic pour l'extension intégrée).

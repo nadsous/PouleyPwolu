@@ -60,8 +60,15 @@ const fromChrome = (url) => {
   }
   return url;
 };
-// Ctrl+T et les autres « nouvel onglet » de Chromium affichent la page PouleyPwolu.
+// Ctrl+T et les autres « nouvel onglet » de Chromium affichent la page PouleyPwolu ;
+// Ctrl+H et Ctrl+J, ses pages Historique et Téléchargements.
 const isChromeNewTab = (url) => /^chrome:\/\/(newtab|new-tab-page)\//.test(url || '');
+const CHROME_PAGES = { history: 'historique', downloads: 'telechargements' };
+const pouleyPageFor = (url) => {
+  if (isChromeNewTab(url)) return NEWTAB;
+  const m = /^chrome:\/\/(history|downloads)(\/|$)/.exec(url || '');
+  return m ? PAGES + CHROME_PAGES[m[1]] + '.html' : null;
+};
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Modèle (repris de main.js)
@@ -100,6 +107,7 @@ function resolveInput(raw) {
 }
 
 function searchUrl(q) {
+  self.PouleyConfig.withCustomEngine(S());
   const engine = SEARCH_ENGINES[S().searchEngine] || SEARCH_ENGINES.duckduckgo;
   return fill(engine.url, q);
 }
@@ -974,7 +982,7 @@ chrome.tabs.onCreated.addListener((tab) => {
     const opener = tab.openerTabId != null ? byChrome.get(tab.openerTabId) : null;
     const of = opener && findTab(opener);
     const url = fromChrome(tab.pendingUrl || tab.url);
-    if (isChromeNewTab(tab.pendingUrl || tab.url)) chrome.tabs.update(tab.id, { url: NEWTAB }).catch(() => {});
+    if (pouleyPageFor(tab.pendingUrl || tab.url)) chrome.tabs.update(tab.id, { url: pouleyPageFor(tab.pendingUrl || tab.url) }).catch(() => {});
     openTab({
       url, adopt: tab.id, background: !tab.active,
       poulaillerId: of && of.poulailler ? of.poulailler.id : undefined,
@@ -1022,7 +1030,7 @@ chrome.tabs.onUpdated.addListener(async (chromeId, change, tab) => {
     rt.https = change.url.startsWith('https:');
     rt.penOn = false;
   }
-  if (change.url && isChromeNewTab(change.url)) chrome.tabs.update(chromeId, { url: NEWTAB }).catch(() => {});
+  if (change.url && pouleyPageFor(change.url)) chrome.tabs.update(chromeId, { url: pouleyPageFor(change.url) }).catch(() => {});
   if (change.title && !/^chrome-extension:\/\/[a-p]{32}\/?$/.test(change.title)) patch.title = change.title;
   if (change.favIconUrl !== undefined) patch.favicon = change.favIconUrl || null;
   if (change.audible !== undefined) rt.audible = change.audible;

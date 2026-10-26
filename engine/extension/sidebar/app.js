@@ -105,7 +105,7 @@
   }
   const internalTitle = (url) => {
     const host = (url || '').replace('pouley://', '').split(/[/?]/)[0];
-    return { newtab: 'Nouvel onglet', jeu: 'Pouley contre le Renard', offline: 'Hors ligne', erreur: 'Erreur', onboarding: 'Bienvenue', reglages: 'Paramètres', archive: 'Archive', plumes: 'Mon poulailler du jour', poulailler: 'Poulailler', groupe: 'Groupe d’œufs' }[host] || 'PouleyPwolu';
+    return { newtab: 'Nouvel onglet', jeu: 'Pouley contre le Renard', offline: 'Hors ligne', erreur: 'Erreur', onboarding: 'Bienvenue', reglages: 'Paramètres', archive: 'Archive', plumes: 'Mon poulailler du jour', poulailler: 'Poulailler', groupe: 'Groupe d’œufs', historique: 'Historique', telechargements: 'Téléchargements', json: 'JSON' }[host] || 'PouleyPwolu';
   };
 
   function favicon(rec, cls = 'fi') {
@@ -123,6 +123,8 @@
   function render() {
     if (!snap) return;
     const s = S();
+    window.PouleyConfig.withCustomEngine(s);
+    if (!SEARCH_ENGINES[s.searchEngine]) s.searchEngine = 'duckduckgo';
     const body = document.body;
     body.classList.toggle('side-left', s.sidebarPosition === 'left');
     body.classList.toggle('side-right', s.sidebarPosition === 'right');
@@ -696,6 +698,11 @@
       { label: 'Paramètres', icon: 'reglages', run: () => openSettings() },
       { label: 'Coffre à mots de passe', icon: 'cle', run: () => openVault() },
       { label: 'Inspecter le site (vie privée, technos, couleurs)', icon: 'inspecter', run: () => toggleInspector(true) },
+      inChromiumBar() ? { label: 'Historique', icon: 'archive', run: () => api.cmd('tab.new', { url: 'pouley://historique' }) } : null,
+      inChromiumBar() ? { label: 'Téléchargements', icon: 'oeuf', run: () => api.cmd('tab.new', { url: 'pouley://telechargements' }) } : null,
+      inChromiumBar() ? { label: 'Code source de la page', icon: 'code', run: () => api.cmd('dev.source') } : null,
+      inChromiumBar() ? { label: 'Rapport de la page en JSON (développeurs)', icon: 'code', run: () => api.cmd('dev.report') } : null,
+      inChromiumBar() ? { label: 'Réglages en JSON (pouley.json)', icon: 'outils', run: () => openSettings('json') } : null,
       { label: 'Ouvrir l’assistant IA (extension)', icon: 'ia', run: () => api.cmd('ai.toggle') },
       { label: `Résumer la page avec ${ai.label}`, logo: s.ai, run: () => api.cmd('ai.askPage') },
       { label: 'Onglet éphémère (rien n’est gardé)', icon: 'fantome', run: () => api.cmd('tab.new', { ephemeral: true }) },
@@ -730,7 +737,7 @@
     ];
     if (snap.cometAvailable) list.push({ label: 'Ouvrir cette page dans Comet', icon: 'comet', run: () => api.cmd('tab.openInComet') });
     for (const p of snap.state.poulaillers) list.push({ label: `Aller au poulailler ${p.name}`, icon: p.icon, color: p.color, run: () => api.cmd('poulailler.switch', p.id) });
-    return list;
+    return list.filter(Boolean);
   }
 
   function openPalette(mode = 'new') {
@@ -894,7 +901,9 @@
     { id: 'productivite', file: 'plumes.score', icon: 'travail', tint: '#e8b33c', label: 'Productivité', desc: 'Des plumes quand tu avances, des tenders quand tu traînes sur les sites qui distraient.' },
     { id: 'legerete', file: 'legerete.ts', icon: 'etoile', tint: '#d19a66', label: 'Performances', desc: 'Garder le navigateur léger et rapide.' },
     { id: 'extensions', file: 'extensions.json', icon: 'extension', tint: '#ef3e36', label: 'Extensions', desc: 'Les extensions préinstallées, qui fonctionnent sans connexion.' },
+    { id: 'dev', file: 'dev.tools', icon: 'code', tint: '#61afef', label: 'Développeurs', desc: 'Outils pour les développeurs : JSON, code source, données des sites, moteur Chromium.' },
     { id: 'donnees', file: 'donnees.sh', icon: 'effacer', tint: '#e06c75', label: 'Données', desc: 'Tout reste sur ta machine. Tu peux tout effacer.' },
+    { id: 'json', file: 'pouley.json', icon: 'outils', tint: '#e5c07b', label: 'Fichier JSON', desc: 'Tous tes réglages dans un fichier JSON : modifie-les directement, ils sont vérifiés avant d’être appliqués.' },
     { id: 'apropos', file: 'README.md', icon: 'livre', tint: '#abb2bf', label: 'À propos', desc: 'PouleyPwolu, le navigateur de Nads.' },
   ];
 
@@ -934,7 +943,8 @@
         st.searchEngine === 'comet' ? { type: 'choice', set: 'searchEngine2', name: 'second_choix', label: 'Second choix',
           help: 'Perplexity répond avec l’IA. Quand tu veux plutôt une liste de sites classique, ce moteur est proposé juste en dessous dans la barre d’adresse (Ctrl+Entrée), sur la page Nouvel onglet et au clic droit.',
           options: Object.fromEntries(Object.entries(SEARCH_ENGINES).filter(([k]) => k !== 'comet').map(([k, v]) => [k, opt(k, v.label, v.note, { logo: true })])) } : null,
-        { type: 'info', name: 'comet', label: 'Application Comet', value: snap.cometAvailable ? 'Installée' : 'Non installée',
+        { type: 'customengine', name: 'moteur_perso', label: 'Ton propre moteur', help: 'Une adresse de recherche avec %s à la place des mots cherchés, par exemple https://www.qwant.com/?q=%s ou https://github.com/search?q=%s. Il apparaît ensuite dans la liste au-dessus.' },
+        chromium ? null : { type: 'info', name: 'comet', label: 'Application Comet', value: snap.cometAvailable ? 'Installée' : 'Non installée',
           help: snap.cometAvailable ? 'Clic droit sur une page ou un lien → « Ouvrir dans Comet ».' : 'Installe Comet pour pouvoir y ouvrir une page en un clic.' },
       ].filter(Boolean);
       case 'barre': return [
@@ -1030,6 +1040,30 @@
         { type: 'number', set: 'archiveAfterHours', name: 'archive_apres', label: 'Ranger les vieux onglets après', help: 'Les onglets non épinglés vont dans l’archive, comme dans Arc. 0 = jamais.', min: 0, max: 720, unit: 'h' },
         { type: 'info', name: 'veille_urgence', label: 'Veille d’urgence', value: 'Automatique', help: 'Si Windows n’a plus que 10 % de mémoire libre, les onglets en arrière-plan s’endorment tout de suite.' },
       ].filter(Boolean);
+      case 'dev': return [
+        { type: 'bool', set: 'jsonViewer', name: 'visionneuse_json', label: 'Visionneuse JSON', help: 'Les pages qui renvoient du JSON (API, fichiers .json) s’affichent en arbre coloré : replier, filtrer, copier le chemin d’une clé (clic sur la clé), vue formatée ou brute.' },
+        { type: 'actions', help: 'La page affichée :', items: [
+          { label: 'Code source', cmd: 'dev --source', run: () => api.cmd('dev.source') },
+          { label: 'Rapport de la page (JSON)', cmd: 'dev --rapport', run: () => api.cmd('dev.report') },
+          { label: 'Couper / remettre le JavaScript du site', cmd: 'dev --javascript', run: () => api.cmd('dev.javascript') },
+          { label: 'Vider le cache et recharger', cmd: 'dev --recharger-sans-cache', run: () => api.cmd('dev.hardReload') },
+          { label: 'Effacer les données du site', cmd: 'dev --effacer-site', danger: true, run: () => api.cmd('dev.clearSite') },
+        ] },
+        { type: 'info', name: 'outils_chromium', label: 'Outils de développement', value: 'F12', help: 'Ctrl+Maj+I ouvre aussi les outils de Chromium (éléments, console, réseau…). Ctrl+Maj+C : inspecter un élément.' },
+        { type: 'actions', help: 'Pages du moteur Chromium :', items: [
+          { label: 'Fonctions expérimentales (flags)', cmd: 'chrome --flags', run: () => api.cmd('tab.new', { url: 'chrome://flags' }) },
+          { label: 'Inspecter les service workers', cmd: 'chrome --inspect', run: () => api.cmd('tab.new', { url: 'chrome://inspect/#service-workers' }) },
+          { label: 'Extensions (mode développeur)', cmd: 'chrome --extensions', run: () => api.cmd('tab.new', { url: 'chrome://extensions' }) },
+          { label: 'Réseau et DNS', cmd: 'chrome --net', run: () => api.cmd('tab.new', { url: 'chrome://net-internals/#dns' }) },
+          { label: 'Carte graphique', cmd: 'chrome --gpu', run: () => api.cmd('tab.new', { url: 'chrome://gpu' }) },
+          { label: 'Version et ligne de commande', cmd: 'chrome --version', run: () => api.cmd('tab.new', { url: 'chrome://version' }) },
+        ] },
+        { type: 'actions', help: 'Historique et téléchargements :', items: [
+          { label: 'Historique (Ctrl+H)', cmd: 'historique', run: () => api.cmd('tab.new', { url: 'pouley://historique' }) },
+          { label: 'Téléchargements (Ctrl+J)', cmd: 'telechargements', run: () => api.cmd('tab.new', { url: 'pouley://telechargements' }) },
+        ] },
+      ];
+      case 'json': return [{ type: 'jsonedit' }];
       case 'donnees': return [
         chromium ? { type: 'info', name: 'profil', label: 'Tes onglets, favoris et poulaillers', value: 'Sur ta machine',
           help: 'Rangés dans ton profil Chromium, sur ton ordinateur. Rien n’est envoyé nulle part.' }
@@ -1045,8 +1079,10 @@
         { type: 'actions', items: [
           { label: 'Effacer cookies et données maintenant', danger: true, cmd: 'effacer --tout', run: () => api.cmd('data.clearAll') },
           { label: 'Voir l’archive des onglets', cmd: 'archive', run: () => { closeOverlay(); openArchive(); } },
+          chromium ? { label: 'Voir l’historique', cmd: 'historique', run: () => api.cmd('tab.new', { url: 'pouley://historique' }) } : null,
+          chromium ? { label: 'Voir les téléchargements', cmd: 'telechargements', run: () => api.cmd('tab.new', { url: 'pouley://telechargements' }) } : null,
           { label: 'Revoir l’histoire de Pouley', cmd: 'histoire --rejouer', run: () => { closeOverlay(); api.cmd('onboarding.replay'); } },
-        ] },
+        ].filter(Boolean) },
       ].filter(Boolean);
       case 'extensions': return [
         { type: 'extadd' },
@@ -1093,6 +1129,80 @@
       }
       default: return [];
     }
+  }
+
+  // ── pouley.json : les réglages en JSON coloré, modifiables, vérifiés avant d'être appliqués.
+  function jsonEditor() {
+    const J = window.PouleyJson;
+    if (!document.getElementById('jv-css')) {
+      const css = document.createElement('style');
+      css.id = 'jv-css';
+      css.textContent = J.CSS;
+      document.head.append(css);
+    }
+    const box = h('div', { class: 'pj' });
+    const hl = h('pre', { class: 'pj-hl jv' + (S().theme === 'light' ? ' light' : ''), 'aria-hidden': 'true' });
+    const ta = h('textarea', { class: 'pj-ta', spellcheck: 'false', wrap: 'off' });
+    const gut = h('div', { class: 'pj-gut' });
+    const status = h('div', { class: 'pj-status' });
+    const area = h('div', { class: 'pj-area' }, gut, h('div', { class: 'pj-scroll' }, hl, ta));
+    const text = () => JSON.stringify(S(), null, 2);
+    const paint = () => {
+      hl.innerHTML = J.highlight(ta.value) + '\n';
+      const n = ta.value.split('\n').length;
+      if (gut.childElementCount !== n) gut.replaceChildren(...Array.from({ length: n }, (_, i) => h('span', null, String(i + 1))));
+      const err = J.parseError(ta.value);
+      box.classList.toggle('bad', !!err);
+      for (const s of gut.querySelectorAll('.err')) s.classList.remove('err');
+      if (err && err.line && gut.children[err.line - 1]) gut.children[err.line - 1].classList.add('err');
+      status.replaceChildren(err
+        ? h('span', { class: 'pj-err' }, '✗ JSON invalide' + (err.line ? ` (ligne ${err.line}, colonne ${err.col})` : '') + ' : ' + err.message)
+        : h('span', { class: 'pj-ok' }, box.dataset.dirty === '1' ? '● Modifié · Ctrl+S pour appliquer' : '✓ À jour · ' + Object.keys(S()).length + ' réglages'));
+    };
+    const sync = () => { hl.scrollTop = ta.scrollTop; hl.scrollLeft = ta.scrollLeft; gut.scrollTop = ta.scrollTop; };
+    box.refresh = () => { if (box.dataset.dirty !== '1') { ta.value = text(); paint(); } };
+    const apply = async () => {
+      const err = J.parseError(ta.value);
+      if (err) return toast('Corrige le JSON avant d’appliquer.', { title: 'pouley.json' });
+      const r = await api.cmd('settings.replace', JSON.parse(ta.value));
+      if (r && r.errors && r.errors.length) {
+        toast(r.errors.slice(0, 3).join(' · '), { title: 'Réglages refusés', timeout: 8000 });
+        return;
+      }
+      box.dataset.dirty = '0';
+      toast((r && r.changed ? r.changed + ' réglage' + (r.changed > 1 ? 's modifiés' : ' modifié') : 'Aucun changement') + '.', { title: 'pouley.json' });
+      ta.value = text();
+      paint();
+    };
+    ta.addEventListener('input', () => { box.dataset.dirty = '1'; paint(); });
+    ta.addEventListener('scroll', sync);
+    ta.addEventListener('keydown', (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); apply(); }
+      if (e.key === 'Tab') {
+        e.preventDefault();
+        const s = ta.selectionStart;
+        ta.setRangeText('  ', s, ta.selectionEnd, 'end');
+        ta.dispatchEvent(new Event('input'));
+      }
+    });
+    const tools = h('div', { class: 'pj-tools' },
+      h('button', { class: 'btn nads', onclick: apply }, 'Appliquer (Ctrl+S)'),
+      h('button', { class: 'btn', onclick: () => { box.dataset.dirty = '0'; box.refresh(); } }, 'Annuler les changements'),
+      h('button', { class: 'btn', onclick: () => { try { ta.value = JSON.stringify(JSON.parse(ta.value), null, 2); box.dataset.dirty = '1'; paint(); } catch {} } }, 'Reformater'),
+      h('button', { class: 'btn', onclick: () => navigator.clipboard.writeText(ta.value).then(() => toast('JSON copié.')) }, 'Copier'),
+      h('button', { class: 'btn', onclick: () => {
+        const a = h('a', { href: URL.createObjectURL(new Blob([ta.value], { type: 'application/json' })), download: 'pouley.json' });
+        a.click();
+      } }, 'Exporter'),
+      h('button', { class: 'btn', onclick: () => {
+        const f = h('input', { type: 'file', accept: '.json,application/json' });
+        f.onchange = async () => { const file = f.files[0]; if (!file) return; ta.value = await file.text(); box.dataset.dirty = '1'; paint(); };
+        f.click();
+      } }, 'Importer'));
+    box.append(tools, area, status);
+    ta.value = text();
+    paint();
+    return box;
   }
 
   // ── Rendu « Simple » : lisible par tout le monde
@@ -1166,6 +1276,25 @@
         });
         return box;
       }
+      case 'customengine': {
+        const name = h('input', { class: 'v-input', placeholder: 'Nom, ex. Qwant', value: st.customSearchName || '', spellcheck: 'false', style: { maxWidth: '160px' } });
+        const url = h('input', { class: 'v-input mono', placeholder: 'https://exemple.com/recherche?q=%s', value: st.customSearchUrl || '', spellcheck: 'false' });
+        const save = () => {
+          const u = url.value.trim();
+          if (u && !/^https?:\/\/\S+%s/.test(u)) return toast('L’adresse doit commencer par https:// et contenir %s.', { title: 'Moteur de recherche' });
+          const patch = { customSearchName: name.value.trim().slice(0, 40), customSearchUrl: u };
+          if (u) patch.searchEngine = 'perso';
+          else if (st.searchEngine === 'perso') patch.searchEngine = 'duckduckgo';
+          api.cmd('settings.set', patch);
+          toast(u ? 'Ton moteur est utilisé pour les recherches.' : 'Moteur personnalisé retiré.', { title: 'Moteur de recherche' });
+        };
+        url.addEventListener('keydown', (e) => { if (e.key === 'Enter') save(); });
+        return h('div', { class: 'set-block' },
+          h('div', { class: 'set-txt' }, h('b', null, it.label), h('p', null, it.help)),
+          h('div', { class: 'v-pwrow' }, name, url, h('button', { class: 'btn nads', onclick: save }, 'Utiliser')));
+      }
+      case 'jsonedit':
+        return jsonEditor();
       case 'extadd': {
         const input = h('input', { class: 'v-input', placeholder: 'Adresse sur le Chrome Web Store, ex. chromewebstore.google.com/detail/proton-pass/…', spellcheck: 'false' });
         const go = () => { if (input.value.trim()) installExtension(input.value.trim()); };
@@ -1221,7 +1350,7 @@
             h('div', null, h('b', null, 'PouleyPwolu'), h('small', null, 'Version ' + snap.version + ' · par Nads'))),
           h('ul', null,
             h('li', null, 'Aucune donnée collectée : pas de compte, pas de statistiques, pas de rapport de plantage.'),
-            h('li', null, 'Aucun historique enregistré. Tes réglages et tes poulaillers restent sur ta machine.'),
+            h('li', null, snap.chromium ? 'Historique, téléchargements, réglages et poulaillers restent sur ta machine.' : 'Aucun historique enregistré. Tes réglages et tes poulaillers restent sur ta machine.'),
             h('li', null, 'Le bouclier, l’analyse des technos et des couleurs tournent sur ton ordinateur.')),
           h('p', { class: 'set-help' }, 'Logiciel propriétaire gratuit © 2026 Nadir Tounsi (Nads). Logos : Simple Icons (CC0) et LobeHub Icons (MIT).'),
           h('div', { class: 'set-actions' },
@@ -1263,6 +1392,8 @@
             onchange: (e) => set(it.set, Number(e.target.value)) }));
       } else if (it.type === 'info') {
         value = tk('st', '"' + it.value + '"');
+      } else if (it.type === 'customengine') {
+        value = tk('st', JSON.stringify(st.customSearchUrl || ''));
       } else if (it.type === 'focussites') {
         value = h('span', null, tk('pn', '['), ...(st.focusSites || []).map((x, i) => [i ? tk('pn', ', ') : null, tk('st', '"' + x + '"')]), tk('pn', ']'));
       } else if (it.type === 'extcard') {
@@ -1294,7 +1425,7 @@
         }
       } else if (it.type === 'about') {
         lines.push({ raw: h('span', { class: 'md-h1' }, '# PouleyPwolu ', tk('nb', snap.version)) }, { blank: true },
-          { raw: tk('cm', '> Zéro télémétrie · aucun historique · tout en local') });
+          { raw: tk('cm', snap.chromium ? '> Zéro télémétrie · tout en local' : '> Zéro télémétrie · aucun historique · tout en local') });
       }
     }
     return lines;
@@ -1335,6 +1466,14 @@
 
     const editor = ide.querySelector('.ide-code');
     const top = editor.scrollTop;
+    // pouley.json : le même éditeur dans les deux vues ; on ne le remplace pas pendant la frappe.
+    if (meta.id === 'json') {
+      const cur = editor.querySelector('.pj');
+      if (cur && cur.dataset.dirty === '1') return;
+      if (cur) { cur.refresh(); return; }
+      editor.replaceChildren(jsonEditor());
+      return;
+    }
     const items = sectionItems(meta.id);
     if (code) {
       const lines = [{ note: meta.desc }, { blank: true }, ...codeLines(items)];
@@ -2616,6 +2755,8 @@
   $('#btn-settings').onclick = () => openSettings();
   $('#btn-add-space').onclick = () => openPoulaillerEditor(null);
   $('#btn-archive').onclick = () => openArchive();
+  $('#btn-history').onclick = () => api.cmd('tab.new', { url: 'pouley://historique' });
+  $('#btn-downloads').onclick = () => api.cmd('tab.new', { url: 'pouley://telechargements' });
   $('#btn-vault').onclick = () => openVault();
   $('#poulailler-title').onclick = () => openPoulaillerEditor(activeP());
   $('#brand').innerHTML = pouleSvg();

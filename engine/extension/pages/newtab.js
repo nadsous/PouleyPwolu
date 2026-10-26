@@ -3,6 +3,7 @@
   const { SEARCH_ENGINES, AI_PROVIDERS, fill } = PouleyConfig;
   const { state } = await chrome.storage.local.get('state');
   const s = (state && state.settings) || {};
+  PouleyConfig.withCustomEngine(s);
   const engineKey = SEARCH_ENGINES[s.searchEngine] ? s.searchEngine : 'duckduckgo';
   const engine = SEARCH_ENGINES[engineKey];
   const aiKey = AI_PROVIDERS[s.ai] ? s.ai : 'claude';

@@ -42,6 +42,10 @@ export const DEFAULT_STATE = {
     focusNudge: true,
     focusSites: DEFAULT_SITES,
     pen: { tool: 'pen', color: '#EF3E36', size: 4, pens: [] },
+    // Développeurs
+    jsonViewer: true,
+    customSearchName: '',
+    customSearchUrl: '', // adresse avec %s à la place de la recherche
   },
   activePoulailler: null,
   poulaillers: [],
