@@ -2,6 +2,15 @@
 // palette de commandes, réglages, inspecteur, alertes de confidentialité.
 (() => {
   const api = window.pouley;
+  // Chromium : la barre fait 260 px. Les grands écrans (réglages, archive…) s'ouvrent dans
+  // une page PouleyPwolu en pleine fenêtre, qui exécute ce même fichier (mode « page »).
+  const inChromiumBar = () => document.body.classList.contains('chromium') && !document.body.classList.contains('page-mode');
+  const inPageMode = () => document.body.classList.contains('page-mode');
+  const pageOnly = (name, arg) => {
+    if (!inChromiumBar()) return false;
+    api.cmd('ui.page', { name, arg: arg ?? null });
+    return true;
+  };
   const { SEARCH_ENGINES, AI_PROVIDERS, POULAILLER_COLORS, KEYWORDS, REPO_SHORT, keywordSearch, fill } = window.PouleyConfig;
   const Sp = window.PouleySprites;
   const I = window.PouleyIcons;
@@ -91,7 +100,7 @@
   }
   const internalTitle = (url) => {
     const host = (url || '').replace('pouley://', '').split(/[/?]/)[0];
-    return { newtab: 'Nouvel onglet', jeu: 'Pouley contre le Renard', offline: 'Hors ligne', erreur: 'Erreur' }[host] || 'PouleyPwolu';
+    return { newtab: 'Nouvel onglet', jeu: 'Pouley contre le Renard', offline: 'Hors ligne', erreur: 'Erreur', onboarding: 'Bienvenue', reglages: 'Paramètres', archive: 'Archive', plumes: 'Mon poulailler du jour', poulailler: 'Poulailler', groupe: 'Groupe d’œufs' }[host] || 'PouleyPwolu';
   };
 
   function favicon(rec, cls = 'fi') {
@@ -651,6 +660,8 @@
   function closeOverlay(silent) {
     if (!overlay) return;
     overlay = null;
+    // Page en pleine fenêtre : fermer l'écran ferme la page.
+    if (inPageMode() && !silent) { api.cmd('tab.close'); return; }
     if (snap) applyLook(lookOf(activeP()));
     ov.classList.add('hidden');
     ov.replaceChildren();
@@ -1338,6 +1349,7 @@
   }
 
   function openSettings(file) {
+    if (pageOnly('settings', file || null)) return;
     if (file) settingsFile = file;
     settingsQuery = '';
     openOverlay('settings', () => {
@@ -1376,6 +1388,7 @@
   }
 
   function openPoulaillerEditor(p) {
+    if (pageOnly('editor', p ? p.id : null)) return;
     const base = p || { color: POULAILLER_COLORS[snap.state.poulaillers.length % POULAILLER_COLORS.length] };
     const data = {
       name: p ? p.name : '', icon: p ? p.icon : 'oeuf', isolated: p ? p.isolated : false,
@@ -1458,6 +1471,7 @@
   }
 
   function openArchive() {
+    if (pageOnly('archive')) return;
     openOverlay('archive', () => {
       const arch = snap.state.archive || [];
       return h('div', { class: 'modal settings' },
@@ -1589,6 +1603,7 @@
   }
 
   function openFocus() {
+    if (pageOnly('focus')) return;
     openOverlay('focus', () => h('div', { class: 'modal settings focus-modal' },
       h('header', null, h('span', { class: 'fc-head-ic', html: Sp.toSvg(Sp.PLUME) }), h('h2', null, 'Mon poulailler du jour'),
         h('button', { class: 'btn', onclick: () => { closeOverlay(); openSettings('productivite'); } }, 'Réglages'),
@@ -1783,6 +1798,9 @@
   }
 
   async function openVault(opts = {}) {
+    // Chromium : les mots de passe sont dans le gestionnaire de Chromium (importés de la
+    // version Electron au premier lancement).
+    if (document.body.classList.contains('chromium')) { api.cmd('tab.new', { url: 'chrome://password-manager/passwords' }); return; }
     vaultUi.then = opts.then || null;
     vaultUi.mode = opts.mode || null;
     vaultUi.error = '';
@@ -2439,6 +2457,7 @@
   });
 
   function openGroupEditor(g) {
+    if (pageOnly('group', g.id)) return;
     const data = { name: g.name, color: g.color, auto: !!g.auto, sites: [...(g.sites || [])] };
     openOverlay('group', () => {
       const root = h('div', { class: 'modal editor group-editor' });
@@ -2601,6 +2620,15 @@
       },
     });
   }
+
+  // Ouverture d'un écran par la page en pleine fenêtre (chromium.js).
+  window.pouleyOpen = {
+    settings: (file) => openSettings(file || undefined),
+    archive: () => openArchive(),
+    focus: () => openFocus(),
+    editor: (id) => openPoulaillerEditor(id ? snap.state.poulaillers.find((p) => p.id === id) || null : null),
+    group: (id) => { const g = snap.state.poulaillers.flatMap((p) => p.groups || []).find((x) => x.id === id); if (g) openGroupEditor(g); },
+  };
 
   // ───────────────────────────────────────────── démarrage
   api.on('state', (s) => { snap = s; render(); renderExtBar(); renderStoreBanner(); });

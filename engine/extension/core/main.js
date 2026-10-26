@@ -29,10 +29,37 @@ const closedTabs = [];
 // ─────────────────────────────────────────────────────────────────────────────
 // Adresses internes : pouley://newtab s'affiche avec la page Nouvel onglet de l'extension.
 
+// Les pages de l'extension gardent leurs noms de la version Electron : pouley://newtab,
+// pouley://onboarding… (pages/<nom>.html).
 const EXT = chrome.runtime.getURL('');
-const NEWTAB = chrome.runtime.getURL('pages/newtab.html');
-const toChrome = (url) => (!url || url === 'pouley://newtab' ? NEWTAB : url);
-const fromChrome = (url) => (!url || url.startsWith(NEWTAB) || url === 'chrome://newtab/' ? 'pouley://newtab' : url);
+const PAGES = EXT + 'pages/';
+const NEWTAB = PAGES + 'newtab.html';
+// Grands écrans de l'interface ouverts en pleine fenêtre : sidebar/index.html?page=<écran>.
+const UI = EXT + 'sidebar/index.html';
+const UI_PAGES = { settings: 'reglages', archive: 'archive', focus: 'plumes', editor: 'poulailler', group: 'groupe' };
+const UI_NAMES = Object.fromEntries(Object.entries(UI_PAGES).map(([k, v]) => [v, k]));
+const toChrome = (url) => {
+  if (!url) return NEWTAB;
+  const ui = /^pouley:\/\/([a-z-]+)\/?(?:\?(.*))?$/i.exec(url);
+  if (ui && UI_NAMES[ui[1]]) return UI + '?page=' + UI_NAMES[ui[1]] + (ui[2] ? '&' + ui[2] : '');
+  const m = /^pouley:\/\/([a-z0-9-]+)\/?(.*)$/i.exec(url);
+  return m ? PAGES + m[1] + '.html' + (m[2] ? (m[2].startsWith('?') || m[2].startsWith('#') ? m[2] : '?' + m[2]) : '') : url;
+};
+const fromChrome = (url) => {
+  if (!url || /^chrome:\/\/(newtab|new-tab-page)\//.test(url)) return 'pouley://newtab';
+  if (url.startsWith(UI + '?')) {
+    const q = new URLSearchParams(url.slice(UI.length + 1));
+    const name = UI_PAGES[q.get('page')];
+    if (name) return 'pouley://' + name + (q.get('arg') ? '?arg=' + encodeURIComponent(q.get('arg')) : '');
+  }
+  if (url.startsWith(PAGES)) {
+    const m = /^([a-z0-9-]+)\.html(.*)$/i.exec(url.slice(PAGES.length));
+    if (m) return 'pouley://' + m[1] + (m[2] || '');
+  }
+  return url;
+};
+// Ctrl+T et les autres « nouvel onglet » de Chromium affichent la page PouleyPwolu.
+const isChromeNewTab = (url) => /^chrome:\/\/(newtab|new-tab-page)\//.test(url || '');
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Modèle (repris de main.js)
@@ -847,6 +874,18 @@ export const commands = {
   },
   'window.close': async () => chrome.windows.remove(await mainWindow()),
   'views.hidden': () => null,
+  // Fond flouté derrière les écrans de l'interface : inutile dans Chromium (la page reste visible).
+  capture: () => null,
+  // Grand écran demandé par la barre : une page en pleine fenêtre, réutilisée si elle est
+  // déjà ouverte.
+  'ui.page': ({ name, arg } = {}) => {
+    const page = UI_PAGES[name];
+    if (!page) return;
+    const url = 'pouley://' + page + (arg ? '?arg=' + encodeURIComponent(arg) : '');
+    const p = activePoulailler();
+    const open = p.tabs.find((t) => t.url.startsWith('pouley://' + page));
+    if (open) { navigate(open.id, url); activateTab(open.id); } else openTab({ url });
+  },
 };
 
 // Pages de PouleyPwolu ouvertes en pleine fenêtre (réglages, accueil…).
@@ -870,6 +909,7 @@ chrome.tabs.onCreated.addListener((tab) => {
     const opener = tab.openerTabId != null ? byChrome.get(tab.openerTabId) : null;
     const of = opener && findTab(opener);
     const url = fromChrome(tab.pendingUrl || tab.url);
+    if (isChromeNewTab(tab.pendingUrl || tab.url)) chrome.tabs.update(tab.id, { url: NEWTAB }).catch(() => {});
     openTab({
       url, adopt: tab.id, background: !tab.active,
       poulaillerId: of && of.poulailler ? of.poulailler.id : undefined,
@@ -915,7 +955,8 @@ chrome.tabs.onUpdated.addListener(async (chromeId, change, tab) => {
     rt.https = change.url.startsWith('https:');
     rt.penOn = false;
   }
-  if (change.title && !tab.url.startsWith(EXT)) patch.title = change.title;
+  if (change.url && isChromeNewTab(change.url)) chrome.tabs.update(chromeId, { url: NEWTAB }).catch(() => {});
+  if (change.title && !/^chrome-extension:\/\/[a-p]{32}\/?$/.test(change.title)) patch.title = change.title;
   if (change.favIconUrl !== undefined) patch.favicon = change.favIconUrl || null;
   if (change.audible !== undefined) rt.audible = change.audible;
   if (change.mutedInfo) rt.muted = change.mutedInfo.muted;
@@ -971,9 +1012,8 @@ async function start() {
     if (tab.active) currentTabId = byChrome.get(tab.id);
   }
   // Premier lancement : l'histoire d'installation, en pleine fenêtre.
-  const onboardingUrl = chrome.runtime.getURL('pages/onboarding.html');
-  if (!store.state.onboarded && !store.state.poulaillers.some((p) => p.tabs.some((t) => t.url === onboardingUrl))) {
-    openTab({ url: onboardingUrl });
+  if (!store.state.onboarded && !store.state.poulaillers.some((p) => p.tabs.some((t) => t.url === 'pouley://onboarding'))) {
+    openTab({ url: 'pouley://onboarding' });
   }
   if (!currentTabId) {
     const p = activePoulailler();

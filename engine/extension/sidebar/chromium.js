@@ -65,4 +65,15 @@
   api.on('clipboard', (text) => {
     navigator.clipboard.writeText(String(text || '')).catch(() => {});
   });
+
+  // Page en pleine fenêtre : on ouvre l'écran demandé une fois l'état reçu.
+  const q = new URLSearchParams(location.search);
+  const page = q.get('page');
+  if (page) {
+    document.title = { settings: 'Paramètres', archive: 'Archive', focus: 'Mon poulailler du jour', editor: 'Poulailler', group: 'Groupe d’œufs' }[page] || 'PouleyPwolu';
+    api.getState().then(() => setTimeout(() => {
+      const open = window.pouleyOpen && window.pouleyOpen[page];
+      if (open) open(q.get('arg') || null);
+    }, 60));
+  }
 })();

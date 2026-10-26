@@ -1,6 +1,9 @@
 // Pont entre l'interface PouleyPwolu et le cœur (service worker de l'extension).
 // Même API que src/preload/ui.js de la version Electron : app.js ne change pas.
 (() => {
+  // index.html?page=<écran> : page en pleine fenêtre (réglages, archive…), sans la barre.
+  if (new URLSearchParams(location.search).get('page')) document.body.classList.add('page-mode');
+
   const listeners = new Map(); // canal -> Set(fn)
   const pending = new Map(); // id -> { resolve, reject }
   let port = null;
