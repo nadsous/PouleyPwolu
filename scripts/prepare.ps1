@@ -63,7 +63,8 @@ Copy-Item "$root\engine\rebrand.py" $rb
 Copy-Item "$root\engine\branding" "$rb\branding" -Recurse
 Copy-Item "$root\engine\extension" "$rb\extension" -Recurse
 $buildPy = "$ucw\build.py"
-$py = [IO.File]::ReadAllText($buildPy)
+# Fins de ligne normalisées : git sur Windows peut récupérer build.py en CRLF.
+$py = [IO.File]::ReadAllText($buildPy) -replace "`r`n", "`n"
 $anchor = "            None`n        )`n"
 if ($py.IndexOf($anchor) -lt 0) { throw "build.py : point d'insertion du renommage introuvable" }
 $call = $anchor + "        # PouleyPwolu : nom et icônes (ajouté par scripts/prepare.ps1)`n" +
