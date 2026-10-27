@@ -1,0 +1,193 @@
+diff --git a/chrome/browser/extensions/api/pouley_private/pouley_private_api.cc b/chrome/browser/extensions/api/pouley_private/pouley_private_api.cc
+index 0e1f8c4e1c..1c9a269453 100644
+--- a/chrome/browser/extensions/api/pouley_private/pouley_private_api.cc
++++ b/chrome/browser/extensions/api/pouley_private/pouley_private_api.cc
+@@ -17,6 +17,7 @@
+ #include "chrome/browser/extensions/extension_tab_util.h"
+ #include "chrome/browser/extensions/pouley_dock.h"
+ #include "chrome/browser/extensions/window_controller.h"
++#include "chrome/browser/shell_integration.h"
+ #include "chrome/common/extensions/api/pouley_private.h"
+ #include "extensions/browser/extension_registry.h"
+ #include "extensions/common/extension.h"
+@@ -24,7 +25,17 @@
+ #include "url/gurl.h"
+ 
+ #if BUILDFLAG(IS_WIN)
++#include <windows.h>
++
++#include <shellapi.h>
++
++#include "base/base_paths.h"
++#include "base/path_service.h"
++#include "base/strings/strcat.h"
++#include "base/win/scoped_com_initializer.h"
+ #include "chrome/browser/password_manager/pouley_migration.h"
++#include "chrome/install_static/install_util.h"
++#include "chrome/installer/util/shell_util.h"
+ #endif
+ 
+ namespace extensions {
+@@ -253,4 +264,78 @@ ExtensionFunction::ResponseAction PouleyPrivateSetAlwaysOnTopFunction::Run() {
+       WithArguments(pouley::SetAlwaysOnTop(browser, params->on_top)));
+ }
+ 
++namespace {
++
++std::string DefaultBrowserState(int state) {
++  switch (state) {
++    case shell_integration::IS_DEFAULT:
++      return "default";
++    case shell_integration::NOT_DEFAULT:
++    case shell_integration::OTHER_MODE_IS_DEFAULT:
++      return "available";
++    default:
++      return "unknown";
++  }
++}
++
++}  // namespace
++
++ExtensionFunction::ResponseAction
++PouleyPrivateGetDefaultBrowserFunction::Run() {
++  base::MakeRefCounted<shell_integration::DefaultBrowserWorker>()
++      ->StartCheckIsDefault(base::BindOnce(
++          [](scoped_refptr<PouleyPrivateGetDefaultBrowserFunction> self,
++             shell_integration::DefaultWebClientState state) {
++            self->OnState(state);
++          },
++          base::WrapRefCounted(this)));
++  return RespondLater();
++}
++
++void PouleyPrivateGetDefaultBrowserFunction::OnState(int state) {
++  Respond(WithArguments(DefaultBrowserState(state)));
++}
++
++ExtensionFunction::ResponseAction
++PouleyPrivateSetDefaultBrowserFunction::Run() {
++#if BUILDFLAG(IS_WIN)
++  // Windows 10 et 11 ne laissent aucune application se choisir : on ouvre la
++  // page de PouleyPwolu dans « Applications par défaut » (après l'avoir inscrit
++  // auprès de Windows, au cas où l'installation ne l'aurait pas fait).
++  base::ThreadPool::PostTaskAndReply(
++      FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_BLOCKING},
++      base::BindOnce([] {
++        base::win::ScopedCOMInitializer com;
++        base::FilePath exe;
++        if (!base::PathService::Get(base::FILE_EXE, &exe)) {
++          return;
++        }
++        ShellUtil::RegisterChromeBrowser(exe, std::wstring(),
++                                         /*elevate_if_not_admin=*/false);
++        const std::wstring url = base::StrCat(
++            {L"ms-settings:defaultapps?registeredAppUser=",
++             install_static::GetBaseAppName(),
++             ShellUtil::GetCurrentInstallationSuffix(exe)});
++        ::ShellExecuteW(nullptr, L"open", url.c_str(), nullptr, nullptr,
++                        SW_SHOWNORMAL);
++      }),
++      base::BindOnce(&PouleyPrivateSetDefaultBrowserFunction::OnState, this,
++                     static_cast<int>(shell_integration::NOT_DEFAULT)));
++  return RespondLater();
++#else
++  base::MakeRefCounted<shell_integration::DefaultBrowserWorker>()
++      ->StartSetAsDefault(base::BindOnce(
++          [](scoped_refptr<PouleyPrivateSetDefaultBrowserFunction> self,
++             shell_integration::DefaultWebClientState state) {
++            self->OnState(state);
++          },
++          base::WrapRefCounted(this)));
++  return RespondLater();
++#endif
++}
++
++void PouleyPrivateSetDefaultBrowserFunction::OnState(int state) {
++  Respond(WithArguments(DefaultBrowserState(state)));
++}
++
+ }  // namespace extensions
+diff --git a/chrome/browser/extensions/api/pouley_private/pouley_private_api.h b/chrome/browser/extensions/api/pouley_private/pouley_private_api.h
+index de6636537e..3ba8a26ffb 100644
+--- a/chrome/browser/extensions/api/pouley_private/pouley_private_api.h
++++ b/chrome/browser/extensions/api/pouley_private/pouley_private_api.h
+@@ -156,6 +156,30 @@ class PouleyPrivateSetAlwaysOnTopFunction : public ExtensionFunction {
+   ResponseAction Run() override;
+ };
+ 
++class PouleyPrivateGetDefaultBrowserFunction : public ExtensionFunction {
++ public:
++  DECLARE_EXTENSION_FUNCTION("pouleyPrivate.getDefaultBrowser", UNKNOWN)
++
++ protected:
++  ~PouleyPrivateGetDefaultBrowserFunction() override = default;
++  ResponseAction Run() override;
++
++ private:
++  void OnState(int state);
++};
++
++class PouleyPrivateSetDefaultBrowserFunction : public ExtensionFunction {
++ public:
++  DECLARE_EXTENSION_FUNCTION("pouleyPrivate.setDefaultBrowser", UNKNOWN)
++
++ protected:
++  ~PouleyPrivateSetDefaultBrowserFunction() override = default;
++  ResponseAction Run() override;
++
++ private:
++  void OnState(int state);
++};
++
+ }  // namespace extensions
+ 
+ #endif  // CHROME_BROWSER_EXTENSIONS_API_POULEY_PRIVATE_POULEY_PRIVATE_API_H_
+diff --git a/chrome/common/extensions/api/pouley_private.json b/chrome/common/extensions/api/pouley_private.json
+index d9d86e1ced..f6be712602 100644
+--- a/chrome/common/extensions/api/pouley_private.json
++++ b/chrome/common/extensions/api/pouley_private.json
+@@ -198,6 +198,26 @@
+           "name": "callback",
+           "parameters": [{"name": "ok", "type": "boolean"}]
+         }
++      },
++      {
++        "name": "getDefaultBrowser",
++        "type": "function",
++        "description": "« default » si PouleyPwolu est le navigateur par défaut, « available » s'il peut le devenir, « unknown » sinon.",
++        "parameters": [],
++        "returns_async": {
++          "name": "callback",
++          "parameters": [{"name": "state", "type": "string"}]
++        }
++      },
++      {
++        "name": "setDefaultBrowser",
++        "type": "function",
++        "description": "Fait de PouleyPwolu le navigateur par défaut (sous Windows 10 et 11, ouvre le réglage de Windows). Renvoie le nouvel état.",
++        "parameters": [],
++        "returns_async": {
++          "name": "callback",
++          "parameters": [{"name": "state", "type": "string"}]
++        }
+       }
+     ]
+   }
+diff --git a/chrome/install_static/chromium_install_modes.h b/chrome/install_static/chromium_install_modes.h
+index 1568705587..3861d4b009 100644
+--- a/chrome/install_static/chromium_install_modes.h
++++ b/chrome/install_static/chromium_install_modes.h
+@@ -56,11 +56,11 @@ inline constexpr auto kInstallModes = std::to_array<InstallConstants>({
+             L"",  // Empty app_guid since no integration with Google Update.
+         .base_app_name = L"PouleyPwolu",           // A distinct base_app_name.
+         .base_app_id = L"PouleyPwolu",             // A distinct base_app_id.
+-        .browser_prog_id_prefix = L"PouleyPwoluHTML",  // ProgID de la version Electron.
++        .browser_prog_id_prefix = L"PouleyHTML",  // 39 caractères max avec le suffixe .<26> (shell_util.cc).
+         .browser_prog_id_description =
+             L"PouleyPwolu HTML Document",  // Browser ProgID description.
+         .direct_launch_url_scheme = "pouleypwolu",
+-        .pdf_prog_id_prefix = L"PouleyPwoluPDF",  // PDF ProgID prefix.
++        .pdf_prog_id_prefix = L"PouleyPDF",  // PDF ProgID prefix.
+         .pdf_prog_id_description =
+             L"PouleyPwolu PDF Document",  // PDF ProgID description.
+         .active_setup_guid =

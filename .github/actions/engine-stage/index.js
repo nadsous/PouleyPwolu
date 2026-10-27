@@ -46,6 +46,16 @@ async function run() {
     });
     if (retCode === 0) {
         core.setOutput('finished', true);
+        // L'installateur de Chromium n'a pas d'interface : on l'habille de celle de
+        // PouleyPwolu (engine/installateur), sous le même nom.
+        const installers = await (await glob.create(
+            'C:\\ungoogled-chromium-windows\\build\\ungoogled-chromium*installer*.exe',
+            {matchDirectories: false})).glob();
+        for (const file of installers) {
+            await exec.exec('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File',
+                `${process.env.GITHUB_WORKSPACE}\\engine\\installateur\\build-installateur.ps1`,
+                '-MiniInstaller', file, '-Remplacer']);
+        }
         const globber = await glob.create('C:\\ungoogled-chromium-windows\\build\\ungoogled-chromium*',
             {matchDirectories: false});
         let packageList = await globber.glob();

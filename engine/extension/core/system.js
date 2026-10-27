@@ -3,7 +3,24 @@
 import { store, commands, runtime, findTab, current, scheduleBroadcast, sendUi, snapshotExtra, openTab, ready } from './main.js';
 
 const S = () => store.state.settings;
+const P = chrome.pouleyPrivate;
 const REPO = 'nadsous/PouleyPwolu';
+
+// Navigateur par défaut : « default », « available » ou null (inconnu). Revérifié quand
+// on revient dans PouleyPwolu (après le réglage de Windows, par exemple).
+snapshotExtra.defaultBrowser = null;
+function setDefaultState(state) {
+  const next = state === 'default' || state === 'available' ? state : null;
+  if (next !== snapshotExtra.defaultBrowser) { snapshotExtra.defaultBrowser = next; scheduleBroadcast(); }
+}
+let lastCheck = 0;
+async function checkDefault() {
+  if (Date.now() - lastCheck < 3000) return;
+  lastCheck = Date.now();
+  if (P && P.getDefaultBrowser) setDefaultState(await P.getDefaultBrowser().catch(() => null));
+}
+ready.then(checkDefault);
+chrome.windows.onFocusChanged.addListener((id) => { if (id !== chrome.windows.WINDOW_ID_NONE) checkDefault(); });
 
 async function freePct() {
   try {
@@ -105,7 +122,10 @@ Object.assign(commands, {
     await chrome.browsingData.remove({}, ALL_DATA);
     sendUi('toast', { text: 'Cookies, caches et données des sites effacés.' });
   },
-  'browser.default': () => openTab({ url: 'chrome://settings/defaultBrowser' }),
+  'browser.default': async () => {
+    if (!P || !P.setDefaultBrowser) return openTab({ url: 'chrome://settings/defaultBrowser' });
+    setDefaultState(await P.setDefaultBrowser().catch(() => null));
+  },
   'update.check': () => checkUpdate(),
   'update.install': () => { if (update.url) openTab({ url: update.url }); },
 });
