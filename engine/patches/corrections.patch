@@ -1,0 +1,138 @@
+diff --git a/chrome/browser/resources/pouley/copy_extension.py b/chrome/browser/resources/pouley/copy_extension.py
+index 485ab4f165..762b3705fd 100644
+--- a/chrome/browser/resources/pouley/copy_extension.py
++++ b/chrome/browser/resources/pouley/copy_extension.py
+@@ -6,15 +6,38 @@
+ copy_extension.py <source> <destination> <depfile> <sortie principale>
+ Le depfile liste tous les fichiers copiés : ninja recopie dès que l'un change.
+ """
++import json
+ import os
+ import shutil
+ import sys
++import zlib
+ 
+ # Sous-dossiers prévus dans chrome/installer/mini_installer/chrome.release.
+ ALLOWED = {'', 'icons', 'sidebar', 'content', 'pages', 'lib', 'data', 'core',
+            'nadspdf', 'nadspdf/icons', 'nadspdf/models'}
+ 
+ 
++def stamp_version(dst, rel, files):
++    """Ajoute à la version une empreinte du contenu (0.2.0 → 0.2.0.<n>).
++
++    Chromium ne réinstalle le service worker d'une extension intégrée que si sa
++    version change : sans empreinte, une mise à jour du navigateur garderait
++    l'ancien script de fond. La version affichée reste dans « version_name ».
++    """
++    crc = 0
++    for name in sorted(files):
++        with open(os.path.join(dst, name), 'rb') as f:
++            crc = zlib.crc32(name.encode('utf-8') + b'|' + f.read(), crc)
++    path = os.path.join(dst, rel, 'manifest.json')
++    with open(path, encoding='utf-8') as f:
++        manifest = json.load(f)
++    base = manifest['version']
++    manifest.setdefault('version_name', base)
++    manifest['version'] = '%s.%d' % ('.'.join(base.split('.')[:3]), crc % 65535)
++    with open(path, 'w', encoding='utf-8') as f:
++        json.dump(manifest, f, ensure_ascii=False, indent=2)
++
++
+ def main():
+     src, dst, depfile, output = sys.argv[1:5]
+     if os.path.isdir(dst):
+@@ -29,6 +52,14 @@ def main():
+         for f in files:
+             shutil.copyfile(os.path.join(root, f), os.path.join(dst, rel, f))
+             inputs.append(os.path.join(root, f).replace(os.sep, '/'))
++    # L'extension PouleyPwolu et NadsPDF : chacune son empreinte.
++    for rel in ('', 'nadspdf'):
++        if os.path.isfile(os.path.join(dst, rel, 'manifest.json')):
++            prefix = rel + '/' if rel else ''
++            files = [os.path.relpath(i, src).replace(os.sep, '/') for i in inputs]
++            mine = [f for f in files if f.startswith(prefix) and
++                    (rel or not f.startswith('nadspdf/'))]
++            stamp_version(dst, rel, mine)
+     # Format Makefile : une espace dans un chemin s'écrit « \ ».
+     os.makedirs(os.path.dirname(depfile), exist_ok=True)
+     with open(depfile, 'w', encoding='utf-8') as d:
+diff --git a/chrome/browser/ui/views/extensions/pouley_dock.cc b/chrome/browser/ui/views/extensions/pouley_dock.cc
+index 8fafd4e16e..360ef24265 100644
+--- a/chrome/browser/ui/views/extensions/pouley_dock.cc
++++ b/chrome/browser/ui/views/extensions/pouley_dock.cc
+@@ -336,11 +336,15 @@ bool SetSidebarLayout(BrowserWindowInterface* browser, bool right, int width) {
+   if (width <= 0) {
+     return true;
+   }
+-  // Largeur gardée comme si la barre avait été glissée à la main.
+-  if (SidePanelUI* ui = SidePanelUI::From(browser)) {
+-    if (std::optional<SidePanelEntryId> entry = ui->GetCurrentEntryId()) {
+-      ScopedDictPrefUpdate update(pref_service, prefs::kSidePanelIdToWidth);
+-      update->Set(SidePanelEntryIdToString(entry.value()), width);
++  // Largeur gardée comme si la barre avait été glissée à la main, même quand le
++  // panneau est fermé (barre en haut) : Chromium la reprend à l'ouverture.
++  {
++    ScopedDictPrefUpdate update(pref_service, prefs::kSidePanelIdToWidth);
++    update->Set(SidePanelEntryIdToString(SidePanelEntryId::kExtension), width);
++    if (SidePanelUI* ui = SidePanelUI::From(browser)) {
++      if (std::optional<SidePanelEntryId> entry = ui->GetCurrentEntryId()) {
++        update->Set(SidePanelEntryIdToString(entry.value()), width);
++      }
+     }
+   }
+   GlobalBrowserCollection::GetInstance()->ForEach(
+diff --git a/chrome/browser/ui/views/frame/app_menu_button.cc b/chrome/browser/ui/views/frame/app_menu_button.cc
+index e0d817653b..624c42148f 100644
+--- a/chrome/browser/ui/views/frame/app_menu_button.cc
++++ b/chrome/browser/ui/views/frame/app_menu_button.cc
+@@ -54,10 +54,14 @@ views::BubbleAnchor AppMenuButton::GetAnchor() {
+   // The app menu button is always present but might be non-visible or offscreen
+   // in certain cases (e.g. content-fullscreen). In this case, use the fallback
+   // anchor instead.
++  // PouleyPwolu : la barre d'outils est cachée, le bouton peut être hors de la
++  // fenêtre ; sans accroche de secours, la bulle se place d'elle-même.
+   auto* const elements = BrowserElementsViews::From(this);
+-  CHECK(elements);
+-  auto* const element = elements->GetElement(kFallbackPopupAnchorElementId);
+-  CHECK(element);
++  auto* const element =
++      elements ? elements->GetElement(kFallbackPopupAnchorElementId) : nullptr;
++  if (!element) {
++    return views::BubbleAnchor();
++  }
+   return views::BubbleAnchor(element);
+ }
+ 
+diff --git a/chrome/browser/ui/views/frame/layout/browser_view_tabbed_layout_impl.cc b/chrome/browser/ui/views/frame/layout/browser_view_tabbed_layout_impl.cc
+index 485330f2d4..0810ba1617 100644
+--- a/chrome/browser/ui/views/frame/layout/browser_view_tabbed_layout_impl.cc
++++ b/chrome/browser/ui/views/frame/layout/browser_view_tabbed_layout_impl.cc
+@@ -392,7 +392,11 @@ BrowserViewTabbedLayoutImpl::CalculateHorizontalLayout(
+   layout.min_content_width = kContentsContainerMinimumWidth;
+ 
+   // Get information about the vertical tabstrip, if present.
+-  const int toolbar_minimum_width = views().toolbar->GetMinimumSize().width();
++  // PouleyPwolu : la barre d'outils est cachée, elle ne limite pas la largeur de
++  // la barre latérale.
++  const int toolbar_minimum_width =
++      views().toolbar->GetVisible() ? views().toolbar->GetMinimumSize().width()
++                                    : 0;
+   int min_vertical_tab_strip_width = 0;
+   int preferred_vertical_tab_strip_width = 0;
+   if (layout_data_->tab_strip_type == TabStripType::kVertical) {
+diff --git a/chrome/browser/ui/views/session_crashed_bubble_view.cc b/chrome/browser/ui/views/session_crashed_bubble_view.cc
+index e60e823433..8db46d9123 100644
+--- a/chrome/browser/ui/views/session_crashed_bubble_view.cc
++++ b/chrome/browser/ui/views/session_crashed_bubble_view.cc
+@@ -277,6 +277,11 @@ views::BubbleDialogDelegate* SessionCrashedBubbleView::ShowBubble(
+     BrowserWindowInterface* browser,
+     bool uma_opted_in_already,
+     bool offer_uma_optin) {
++  // PouleyPwolu : pas de bulle « Restaurer les pages ? » après un arrêt brutal ;
++  // l'extension intégrée rouvre elle-même les onglets de la barre.
++  if (browser) {
++    return nullptr;
++  }
+   BrowserView* browser_view = BrowserView::GetBrowserViewForBrowser(browser);
+   // TODO(webium): WebUI browser does not use BrowserView. Make an WebUI anchor
+   // for the bubble.

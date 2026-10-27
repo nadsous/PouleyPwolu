@@ -32,7 +32,11 @@ async function applyWindow(windowId) {
     await P.setSidebarLayout(windowId, pos === 'right', width()).catch(() => {});
   }
   if (autoHide() && !peeking) await chrome.sidePanel.close({ windowId }).catch(() => {});
-  else await chrome.sidePanel.open({ windowId }).catch(() => {});
+  else {
+    await chrome.sidePanel.open({ windowId }).catch(() => {});
+    // À l'ouverture, Chromium reprend la dernière largeur enregistrée : on remet la nôtre.
+    if (P) await P.setSidebarLayout(windowId, pos === 'right', width()).catch(() => {});
+  }
 }
 
 export async function applyLayout() {
@@ -51,6 +55,7 @@ async function peek(windowId) {
   setPeeking(true);
   clearTimeout(leaveTimer);
   await chrome.sidePanel.open({ windowId }).catch(() => {});
+  if (P) await P.setSidebarLayout(windowId, position() === 'right', width()).catch(() => {});
 }
 
 // La souris quitte la barre ouverte au survol → elle se referme.

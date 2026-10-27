@@ -213,7 +213,27 @@ function destroyView(recId) {
   const chromeId = rt.chromeId;
   expectedRemovals.add(chromeId);
   unbind(recId);
-  chrome.tabs.remove(chromeId).catch(() => expectedRemovals.delete(chromeId));
+  removeChromeTab(chromeId).catch(() => expectedRemovals.delete(chromeId));
+}
+
+// Chromium ferme la fenêtre (et le navigateur) avec son dernier onglet : quand les autres
+// onglets de la barre dorment, on attend que l'onglet suivant soit créé avant de fermer.
+async function removeChromeTab(chromeId) {
+  for (let i = 0; i < 40; i++) {
+    const tab = await chrome.tabs.get(chromeId).catch(() => null);
+    if (!tab) return;
+    if ((await chrome.tabs.query({ windowId: tab.windowId })).length > 1) break;
+    await new Promise((r) => setTimeout(r, 100));
+  }
+  const tab = await chrome.tabs.get(chromeId).catch(() => null);
+  if (!tab) return;
+  if ((await chrome.tabs.query({ windowId: tab.windowId })).length <= 1) {
+    // Toujours seul : la page Nouvel onglet prend sa place plutôt que de fermer la fenêtre.
+    await chrome.tabs.update(chromeId, { url: NEWTAB });
+    expectedRemovals.delete(chromeId);
+    return;
+  }
+  await chrome.tabs.remove(chromeId);
 }
 
 function updateRec(tabId, patch) {
@@ -657,7 +677,7 @@ function snapshot() {
     maximized: false,
     platform: PLATFORM,
     chromium: true,
-    version: chrome.runtime.getManifest().version,
+    version: chrome.runtime.getManifest().version_name || chrome.runtime.getManifest().version,
     versions: { chromium: (navigator.userAgent.match(/Chrome\/([\d.]+)/) || [])[1] || '' },
     update: { status: 'idle' },
     vault: { exists: false, open: false },

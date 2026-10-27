@@ -41,9 +41,6 @@ export async function importMigration(store) {
   if (fresh) {
     // Première ouverture de la version Chromium : on reprend tout tel quel.
     const keep = { ...DEFAULT_STATE.settings, ...st.settings, ...(old.settings || {}) };
-    // Réglages propres à Electron : remis aux valeurs de Chromium.
-    keep.sidebarPosition = 'left';
-    keep.sidebarAutoHide = false;
     st.settings = keep;
     if (poulaillers.length) {
       st.poulaillers = poulaillers;

@@ -439,3 +439,13 @@ chrome.windows.onCreated.addListener(() => ready.then(applyMaterial));
 
 ready.then(refreshPanel);
 ready.then(applyMaterial);
+
+// Plus d'internet : la page est remplacée par le jeu Pouley contre le Renard, qui propose
+// d'y revenir quand la connexion revient (comme did-fail-load dans la version Electron).
+const OFFLINE_ERRORS = new Set(['net::ERR_INTERNET_DISCONNECTED', 'net::ERR_NETWORK_CHANGED', 'net::ERR_NAME_NOT_RESOLVED', 'net::ERR_ADDRESS_UNREACHABLE', 'net::ERR_PROXY_CONNECTION_FAILED']);
+chrome.webNavigation.onErrorOccurred.addListener((d) => {
+  if (d.frameId !== 0 || !/^https?:/.test(d.url) || !OFFLINE_ERRORS.has(d.error)) return;
+  if (d.error !== 'net::ERR_INTERNET_DISCONNECTED' && navigator.onLine) return;
+  const url = chrome.runtime.getURL('pages/jeu.html') + '?' + new URLSearchParams({ offline: '1', url: d.url });
+  chrome.tabs.update(d.tabId, { url }).catch(() => {});
+});

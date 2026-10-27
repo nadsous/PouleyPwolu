@@ -72,7 +72,7 @@ async function checkUpdate() {
     const rel = await (await fetch(`https://api.github.com/repos/${REPO}/releases/latest`, { headers: { Accept: 'application/vnd.github+json' } })).json();
     const asset = (rel.assets || []).find((x) => x.name === 'moteur.json');
     const info = asset ? await (await fetch(asset.browser_download_url)).json() : null;
-    const mine = chrome.runtime.getManifest().version;
+    const mine = chrome.runtime.getManifest().version_name || chrome.runtime.getManifest().version;
     if (info && newer(info.version, mine)) Object.assign(update, { status: 'available', version: info.version, url: rel.html_url });
     else Object.assign(update, { status: 'uptodate' });
   } catch (err) {

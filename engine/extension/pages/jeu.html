@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <title>Pouley contre le Renard</title>
+  <link rel="stylesheet" href="pages.css" />
+  <style>
+    html, body { overflow: hidden; background: #154d30; }
+    canvas { display: block; width: 100vw; height: 100vh; image-rendering: pixelated; cursor: crosshair; }
+    .hud { position: fixed; top: 14px; left: 16px; right: 16px; display: flex; gap: 12px; align-items: center; pointer-events: none; font-family: 'JetBrains Mono', monospace; }
+    .pill { background: rgba(14, 14, 16, 0.78); color: var(--bright); padding: 6px 12px; border-radius: 10px; font-size: 14px; border: 1px solid rgba(255, 255, 255, 0.08); }
+    .pill b { color: var(--yellow); }
+    .dash { width: 90px; height: 8px; border-radius: 6px; background: rgba(255, 255, 255, 0.15); overflow: hidden; display: inline-block; vertical-align: middle; margin-left: 6px; }
+    .dash i { display: block; height: 100%; background: #4a8cf0; }
+    .grow { flex: 1; }
+    .offline { position: fixed; top: 60px; left: 50%; transform: translateX(-50%); display: none; align-items: center; gap: 12px; padding: 10px 14px; border-radius: 14px; background: rgba(14, 14, 16, 0.86); color: var(--bright); font-size: 14px; border: 1px solid rgba(255, 255, 255, 0.1); z-index: 3; max-width: 92vw; }
+    .offline.show { display: flex; }
+    .offline .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--red); flex: none; }
+    .offline.online .dot { background: #4ade80; }
+    .offline .btn { height: 32px; padding: 0 12px; font-size: 13px; }
+    .screen { position: fixed; inset: 0; display: grid; place-items: center; z-index: 2; background: rgba(8, 12, 10, 0.55); }
+    .screen.hidden { display: none; }
+    .card { text-align: center; padding: 28px 34px; border-radius: 22px; background: rgba(17, 17, 19, 0.9); border: 1px solid rgba(255, 255, 255, 0.1); max-width: 460px; box-shadow: 0 30px 80px -20px rgba(0, 0, 0, 0.8); }
+    .card h1 { margin: 6px 0 8px; color: var(--bright); font-size: 26px; }
+    .card p { margin: 0 0 14px; color: var(--text); }
+    .card .sprites { display: flex; justify-content: center; gap: 20px; align-items: flex-end; }
+    .card .sprites div { width: 80px; height: 80px; }
+    .card .flip { transform: scaleX(-1); }
+    .keys { font-size: 13px; color: var(--muted); line-height: 1.8; }
+    kbd { font: 12px 'JetBrains Mono', monospace; padding: 2px 6px; border-radius: 6px; background: #26262a; border: 1px solid rgba(255, 255, 255, 0.12); color: var(--bright); }
+    .score { font: 600 42px 'JetBrains Mono', monospace; color: var(--yellow); margin: 4px 0; }
+    .theme-pick { margin-top: 14px; font-size: 13px; color: var(--muted); }
+    .theme-pick .btn { height: 28px; padding: 0 10px; font-size: 12px; margin-left: 6px; }
+    .theme-pick select { margin-left: 6px; font: inherit; color: var(--bright); background: #26262a; border: 1px solid rgba(255, 255, 255, 0.14); border-radius: 8px; padding: 4px 8px; }
+  </style>
+</head>
+<body>
+  <canvas id="c"></canvas>
+  <div class="hud">
+    <span class="pill">Score <b id="score">0</b></span>
+    <span class="pill">Record <b id="best">0</b></span>
+    <span class="pill">Sprint <span class="dash"><i id="dash"></i></span></span>
+    <span class="grow"></span>
+    <span class="pill" id="theme-pill" style="display:none"></span>
+    <span class="pill" id="fx" style="display:none"></span>
+    <span class="pill" id="foxes">🦊 ×1</span>
+  </div>
+  <div class="offline" id="offline">
+    <span class="dot"></span>
+    <span id="offline-text">Pas de connexion internet — le renard a rongé les câbles. Joue en attendant !</span>
+    <button class="btn primary" id="retry" style="display:none">Retourner sur la page</button>
+  </div>
+  <div class="screen" id="start">
+    <div class="card">
+      <div class="sprites"><div id="s-poule" class="flip"></div><div id="s-renard"></div></div>
+      <h1>Pouley contre le Renard</h1>
+      <p>Picore le maïs 🌽, ramasse les œufs d’or 🥚 (ils font fuir les renards) et surtout : ne te fais pas attraper !</p>
+      <p class="keys">🪶 plume : tu cours plus vite · 🍗 tender : les renards ralentissent<br />🛡️ bouclier : un renard qui te mord y passe · 🕳️ terrier : cache-toi 3 s</p>
+      <div class="keys">
+        <kbd>↑</kbd><kbd>↓</kbd><kbd>←</kbd><kbd>→</kbd> ou <kbd>Z</kbd><kbd>Q</kbd><kbd>S</kbd><kbd>D</kbd> / <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> pour courir — ou maintiens la souris<br />
+        <kbd>Espace</kbd> sprint · <kbd>P</kbd> pause
+      </div>
+      <p style="margin-top:18px"><button class="btn primary" id="play">Jouer (Entrée)</button></p>
+      <div class="theme-pick">Décor <select id="theme"></select> <button class="btn" id="theme-toggle" style="display:none"></button></div>
+    </div>
+  </div>
+  <div class="screen hidden" id="over">
+    <div class="card">
+      <div class="sprites"><div id="o-renard"></div></div>
+      <h1 id="over-title">Le renard t’a attrapée !</h1>
+      <div class="score" id="final">0</div>
+      <p id="over-msg"></p>
+      <p><button class="btn primary" id="again">Rejouer (Entrée)</button></p>
+    </div>
+  </div>
+
+  <script src="../lib/sprites.js"></script>
+  <script src="jeu.js"></script>
+  <script src="../lib/keys.js"></script>
+  <script src="../content/raccourcis.js"></script>
+</body>
+</html>
