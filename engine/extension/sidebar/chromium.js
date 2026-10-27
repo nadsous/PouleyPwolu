@@ -84,6 +84,68 @@
     api.cmd('save.result', { id, downloadId });
   });
 
+  // La barre elle-même (pas une page plein écran ni un panneau posé sur une page).
+  const isBar = !/[?&](page|panel)=/.test(location.search);
+
+  // Raccourcis clavier (lib/keys.js) : Ctrl+S masque / montre la barre (core/layout.js),
+  // les autres passent par core/shortcuts.js.
+  addEventListener('keydown', (e) => {
+    const name = isBar && self.PouleyKeys && self.PouleyKeys.match(e);
+    if (!name) return;
+    e.preventDefault();
+    api.cmd(name === 'toggle-bar' ? 'bar.toggle' : 'shortcut.run', name);
+  });
+
+  // Aperçu d'un favori : il se ferme quand la souris va ailleurs dans la barre ou clique.
+  let favPeek = null;
+  api.on('favpeek', (id) => { favPeek = id; });
+  if (isBar) {
+    document.addEventListener('mouseover', (e) => {
+      if (favPeek && !(e.target.closest && e.target.closest('.fav'))) api.cmd('fav.unpeek');
+    });
+    document.addEventListener('pointerdown', () => { if (favPeek) api.cmd('fav.unpeek'); }, true);
+  }
+
+  // Barre ouverte au survol du bord : elle se referme quand la souris la quitte.
+  if (isBar) {
+    document.documentElement.addEventListener('mouseleave', () => api.cmd('bar.leave'));
+    document.documentElement.addEventListener('mouseenter', () => api.cmd('bar.enter'));
+  }
+
+  // Bord de la barre : glisser pour l'élargir ou la rétrécir, jusqu'au bord pour la masquer.
+  const resizer = document.getElementById('side-resizer');
+  if (resizer && isBar) {
+    resizer.addEventListener('pointerdown', async (e) => {
+      if (e.button !== 0 || document.body.classList.contains('side-top')) return;
+      e.preventDefault();
+      resizer.setPointerCapture(e.pointerId);
+      const right = document.body.classList.contains('side-right');
+      const startX = e.screenX;
+      const startW = innerWidth;
+      let w = startW;
+      let raf = 0;
+      document.body.classList.add('resizing');
+      const move = (ev) => {
+        const raw = startW + (right ? startX - ev.screenX : ev.screenX - startX);
+        w = Math.round(raw);
+        document.body.classList.toggle('will-hide', raw < 150);
+        if (raf) return;
+        raf = requestAnimationFrame(() => { raf = 0; if (w >= 150) api.cmd('bar.width', w); });
+      };
+      const up = () => {
+        resizer.removeEventListener('pointermove', move);
+        resizer.removeEventListener('pointerup', up);
+        resizer.removeEventListener('pointercancel', up);
+        document.body.classList.remove('resizing', 'will-hide');
+        if (w < 150) api.cmd('settings.set', { sidebarAutoHide: true });
+        else api.cmd('settings.set', { sidebarWidth: Math.max(200, Math.min(440, w)) });
+      };
+      resizer.addEventListener('pointermove', move);
+      resizer.addEventListener('pointerup', up);
+      resizer.addEventListener('pointercancel', up);
+    });
+  }
+
   api.on('clipboard', (text) => {
     navigator.clipboard.writeText(String(text || '')).catch(() => {});
   });

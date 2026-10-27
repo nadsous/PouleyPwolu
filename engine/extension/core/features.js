@@ -4,11 +4,12 @@
 // Repris de src/main/main.js.
 import {
   store, commands, runtime, byChrome, findTab, current, sendUi, scheduleBroadcast, popupMenu,
-  snapshotExtra, ensureView, mainWindow, activateTab, activePoulailler, openTab, ready,
+  snapshotExtra, ensureView, mainWindow, activateTab, activePoulailler, openTab, ready, floatWindows, extBadges,
 } from './main.js';
 
 const S = () => store.state.settings;
 const P = chrome.pouleyPrivate; // absent si le moteur est plus ancien que l'extension
+const NADSPDF = 'chrome-extension://hjbgmlcjbnphhblmmhbjdjmflejflnfh/index.html?lite=1&lang=fr';
 const chromeIdOf = (recId) => { const rt = runtime.get(recId); return rt && rt.chromeId != null ? rt.chromeId : null; };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -52,17 +53,27 @@ async function floatTab(recId) {
   if (rt.floating) return dockTab(recId, true);
   if (snapshotExtra.split && [snapshotExtra.split.a, snapshotExtra.split.b].includes(recId)) await endSplit();
   const main = await chrome.windows.get(await mainWindow()).catch(() => null);
-  const w = 480;
-  const h = 300;
+  const w = 520;
+  const h = 340;
   const left = main ? main.left + main.width - w - 24 : undefined;
   const top = main ? main.top + main.height - h - 24 : undefined;
   rt.floating = true;
-  const win = await chrome.windows.create({ tabId: rt.chromeId, type: 'popup', width: w, height: h, left, top, focused: true }).catch(() => null);
+  rt.floatOpacity = 1;
+  // Une fenêtre PouleyPwolu sans barre latérale : juste la page, sous la petite barre
+  // de la superposition (pages/flottant.html), comme dans la version Electron.
+  floatWindows.pending += 1;
+  const win = await chrome.windows.create({ tabId: rt.chromeId, type: 'normal', width: w, height: h, left, top, focused: true }).catch(() => null);
+  floatWindows.pending = Math.max(0, floatWindows.pending - 1);
   if (!win) { rt.floating = false; return; }
+  floatWindows.ids.add(win.id);
   rt.floatWindowId = win.id;
+  await chrome.sidePanel.close({ windowId: win.id }).catch(() => {});
   // Chromium garde la taille de la fenêtre d'origine pour un onglet déplacé : on la réduit.
   await chrome.windows.update(win.id, { width: w, height: h, left, top }).catch(() => {});
-  if (P) await P.setAlwaysOnTop(win.id, true).catch(() => {});
+  if (P) {
+    await P.setTopBar(win.id, true, 36, 'pages/flottant.html').catch(() => {});
+    await P.setAlwaysOnTop(win.id, true).catch(() => {});
+  }
   // La barre affiche un autre onglet du poulailler.
   if (current() === recId) {
     const p = activePoulailler();
@@ -84,7 +95,45 @@ async function dockTab(recId, show) {
 }
 
 chrome.windows.onRemoved.addListener((windowId) => {
+  floatWindows.ids.delete(windowId);
   for (const rt of runtime.values()) if (rt.floatWindowId === windowId) { rt.floating = false; rt.floatWindowId = null; scheduleBroadcast(); }
+});
+
+// Petite barre de la fenêtre flottante (pages/flottant.html).
+async function floatCommand({ windowId, name, arg }) {
+  const entry = [...runtime.entries()].find(([, rt]) => rt.floatWindowId === windowId);
+  if (!entry) return null;
+  const [recId, rt] = entry;
+  const f = findTab(recId);
+  switch (name) {
+    case 'info': {
+      const tab = rt.chromeId != null ? await chrome.tabs.get(rt.chromeId).catch(() => null) : null;
+      return f && {
+        title: f.rec.title || f.rec.url, url: f.rec.url, favicon: (tab && tab.favIconUrl) || f.rec.favicon || null,
+        opacity: rt.floatOpacity ?? 1, canGoBack: rt.canGoBack !== false,
+      };
+    }
+    case 'opacity':
+      rt.floatOpacity = Math.max(0.25, Math.min(1, Number(arg) || 1));
+      if (P) await P.setWindowOpacity(windowId, rt.floatOpacity).catch(() => {});
+      return null;
+    case 'back': if (rt.chromeId != null) await chrome.tabs.goBack(rt.chromeId).catch(() => {}); return null;
+    case 'reload': if (rt.chromeId != null) await chrome.tabs.reload(rt.chromeId).catch(() => {}); return null;
+    // Fermer la superposition : l'onglet revient dans le navigateur (comme Electron).
+    case 'dock':
+    case 'close': {
+      await dockTab(recId, true);
+      const main = await mainWindow();
+      chrome.windows.update(main, { focused: true }).catch(() => {});
+      return null;
+    }
+  }
+  return null;
+}
+chrome.runtime.onMessage.addListener((msg, sender, reply) => {
+  if (!msg || msg.type !== 'float.cmd' || sender.id !== chrome.runtime.id) return false;
+  ready.then(() => floatCommand(msg)).then(reply, () => reply(null));
+  return true;
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -200,8 +249,25 @@ async function pollMedia() {
       }
     } catch { /* page en cours de chargement */ }
   }
+  // La musique des applications de Windows (Spotify…), par le moteur (data/system-media.ps1).
+  let sys = null;
+  if (S().mediaSystem && P && P.systemMedia) sys = readSys(await P.systemMedia('state').catch(() => ''));
+  // L'onglet qui joue a la priorité ; sinon l'application ; sinon l'onglet en pause.
+  pick = pick && pick.state === 'playing' ? pick : sys && sys.state === 'playing' ? sys : pick || sys;
   const json = JSON.stringify(pick);
   if (json !== lastMediaJson) { lastMediaJson = json; sendUi('media', pick); }
+}
+
+let sysArt = { key: '', data: null };
+function readSys(text) {
+  let d = null;
+  try { d = JSON.parse(text || 'null'); } catch {}
+  if (!d || d.none || !d.title) return null;
+  if (d.art) sysArt = { key: d.artKey, data: d.art };
+  else if (sysArt.key !== d.artKey) sysArt = { key: d.artKey, data: null };
+  const app = String(d.app || '');
+  const name = /spotify/i.test(app) ? 'Spotify' : /zune|music/i.test(app) ? 'Musique' : app.split(/[\\!.]/).filter(Boolean).slice(-1)[0] || 'Application';
+  return { source: 'system', app: name, title: d.title, artist: d.artist || '', album: d.album || '', state: d.state === 'playing' ? 'playing' : 'paused', duration: d.duration || 0, time: d.time || 0, art: sysArt.data };
 }
 setInterval(() => { ready.then(() => pollMedia()).catch(() => {}); }, 1500);
 
@@ -236,6 +302,28 @@ chrome.alarms.onAlarm.addListener((a) => { if (a.name === 'pouley-menage') refre
 
 const baseReport = commands['memory.report'];
 
+let previewOpen = null;
+// Un clic dans une page ferme l'aperçu d'un favori (content/raccourcis.js).
+chrome.runtime.onMessage.addListener((msg) => {
+  if (msg && msg.type === 'preview.close' && previewOpen) commands['fav.unpeek']();
+  return false;
+});
+
+// Badges des boutons d'extensions (le nombre de pubs bloquées…), pour l'onglet affiché.
+async function refreshBadges() {
+  if (!P || !P.getExtensionBadges) return;
+  const list = await P.getExtensionBadges(await mainWindow()).catch(() => null);
+  if (!list) return;
+  const next = new Map(list.map((b) => [b.extensionId, { text: b.text, color: b.color }]));
+  const same = next.size === extBadges.size && [...next].every(([k, v]) => extBadges.get(k)?.text === v.text && extBadges.get(k)?.color === v.color);
+  if (same) return;
+  extBadges.clear();
+  for (const [k, v] of next) extBadges.set(k, v);
+  scheduleBroadcast();
+}
+setInterval(() => { ready.then(refreshBadges).catch(() => {}); }, 3000);
+chrome.tabs.onActivated.addListener(() => ready.then(refreshBadges));
+
 // ─────────────────────────────────────────────────────────────────────────────
 
 Object.assign(commands, {
@@ -267,6 +355,11 @@ Object.assign(commands, {
     popupMenu([{ label: 'Quitter le côte à côte', click: () => endSplit() }]);
   },
   'media.cmd': async (action) => {
+    if (lastMediaJson && JSON.parse(lastMediaJson)?.source === 'system') {
+      if (P && P.systemMedia) await P.systemMedia(String(action)).catch(() => {});
+      setTimeout(() => pollMedia().catch(() => {}), 250);
+      return;
+    }
     const chromeId = mediaTab && chromeIdOf(mediaTab);
     if (!chromeId) return;
     if (action === 'mute') {
@@ -278,6 +371,10 @@ Object.assign(commands, {
     setTimeout(() => pollMedia().catch(() => {}), 250);
   },
   'media.open': () => { if (mediaTab) activateTab(mediaTab); },
+  // NadsPDF, préinstallé (engine/rebrand.py) : ouvrir le lecteur, ou un PDF de l'ordinateur
+  // depuis son propre bouton « Ouvrir ».
+  'ext.nadspdf.open': () => openTab({ url: NADSPDF }),
+  'ext.nadspdf.openFile': () => openTab({ url: NADSPDF }),
   'tab.copyUrl': () => { const f = current() && findTab(current()); if (f) sendUi('clipboard', f.rec.url); },
   'tab.pinnedMenu': () => {
     const p = activePoulailler();
@@ -296,9 +393,22 @@ Object.assign(commands, {
   'tab.devtools': () => sendUi('toast', { text: 'Appuie sur F12 pour ouvrir les outils de développement.' }),
   'tab.find': () => null,
   'tab.findStop': () => null,
-  // Aperçu des favoris au survol, barre masquée : sans objet dans Chromium.
-  'fav.peek': () => null,
-  'fav.unpeek': () => null,
+  // Aperçu d'un favori au survol : la page dans une bulle à côté de la barre.
+  'fav.peek': async ({ id, anchor } = {}) => {
+    const f = id && findTab(id);
+    if (!P || !P.showPreview || !S().favHoverPreview || !f || !/^https?:/.test(f.rec.url)) return;
+    const a = anchor || {};
+    const ok = await P.showPreview(await mainWindow(), f.rec.url, {
+      left: Math.round(a.x || 0), top: Math.round(a.y || 0), width: Math.round(a.width || 1), height: Math.round(a.height || 1),
+    }).catch(() => false);
+    if (ok) { previewOpen = id; sendUi('favpeek', id); }
+  },
+  'fav.unpeek': async () => {
+    if (!previewOpen || !P || !P.showPreview) return;
+    previewOpen = null;
+    sendUi('favpeek', null);
+    await P.showPreview(await mainWindow(), '', { left: 0, top: 0, width: 1, height: 1 }).catch(() => {});
+  },
   'peek.watch': () => null,
   'permission.respond': () => null,
   'memory.report': async () => {

@@ -6,9 +6,12 @@ body.chromium { --side-w: 100%; }
 body.chromium #app { display: block; }
 body.chromium #sidebar { width: 100%; height: 100vh; padding: 10px 8px 10px 10px; }
 body.chromium #main,
-body.chromium #edge-hot,
-body.chromium #side-resizer,
-body.chromium #btn-hide-sidebar { display: none !important; }
+body.chromium #edge-hot { display: none !important; }
+/* Masquée (Ctrl+S), la barre est fermée par Chromium : quand elle s'ouvre au survol,
+   elle s'affiche en entier (pas en version repliée comme dans Electron). */
+body.chromium.sidebar-collapsed #sidebar { width: 100%; padding: 10px 8px 10px 10px; opacity: 1; }
+/* Barre en haut (core/layout.js) : ses deux rangées remplissent la barre posée par le moteur. */
+body.chromium.side-top #sidebar { height: 100vh; padding: 4px 8px 6px 10px; }
 
 /* Page en pleine fenêtre (index.html?page=…) : seul l'écran demandé s'affiche. */
 body.page-mode #sidebar { display: none !important; }

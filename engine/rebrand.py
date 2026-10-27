@@ -76,7 +76,23 @@ def copy_extension(src):
     if to.exists():
         shutil.rmtree(to)
     shutil.copytree(HERE / 'extension', to)
+    copy_nadspdf(to / 'nadspdf')
     return sum(1 for f in to.rglob('*') if f.is_file())
+
+
+def copy_nadspdf(to):
+    """NadsPDF (extensions/nadspdf), préinstallé à côté de l'extension intégrée, avec la clé
+    publique de sa version du Chrome Web Store (engine/nadspdf.key) : même identifiant,
+    hjbgmlcjbnphhblmmhbjdjmflejflnfh, que ses règles d'ouverture des PDF attendent."""
+    import json
+    src = HERE / 'nadspdf' if (HERE / 'nadspdf').is_dir() else HERE.parent / 'extensions' / 'nadspdf'
+    if not src.is_dir():
+        print('NadsPDF absent : non préinstallé')
+        return
+    shutil.copytree(src, to)
+    manifest = json.loads(read(to / 'manifest.json'))
+    manifest['key'] = read(HERE / 'nadspdf.key').strip()
+    write(to / 'manifest.json', json.dumps(manifest, ensure_ascii=False, indent=2) + '\n')
 
 
 def message_ids(grd):

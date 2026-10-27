@@ -743,6 +743,7 @@
   }
 
   function openPalette(mode = 'new') {
+    if (inChromiumBar()) return api.cmd('palette.open', mode);
     const cur = current();
     const initial = mode === 'edit' && cur && !isInternal(cur.rec.url) ? cur.rec.url : '';
     let sel = 0;
@@ -950,13 +951,13 @@
           help: snap.cometAvailable ? 'Clic droit sur une page ou un lien → « Ouvrir dans Comet ».' : 'Installe Comet pour pouvoir y ouvrir une page en un clic.' },
       ].filter(Boolean);
       case 'barre': return [
-        chromium ? null : { type: 'choice', set: 'sidebarPosition', name: 'position', label: 'Position', help: 'À gauche comme Arc, à droite, ou en haut comme un navigateur classique.',
+        { type: 'choice', set: 'sidebarPosition', name: 'position', label: 'Position', help: 'À gauche comme Arc, à droite, ou en haut comme un navigateur classique.',
           options: { left: opt('gauche', 'À gauche', 'Comme Arc'), right: opt('droite', 'À droite', 'Côté droit'), top: opt('haut', 'En haut', 'Onglets classiques') } },
         { type: 'choice', set: 'newTabPosition', name: 'nouvel_onglet', label: 'Où ouvrir les nouveaux onglets', help: 'Barre à gauche ou à droite : en premier = en haut de la liste. Barre en haut : en premier = à gauche, en dernier = à droite.',
           options: { start: opt('premier', 'En premier', 'Comme Arc'), end: opt('dernier', 'En dernier', 'Comme Chrome'), next: opt('apres', 'Après l’onglet ouvert', 'Juste à côté') } },
-        chromium ? null : { type: 'bool', set: 'sidebarAutoHide', name: 'masquer', label: 'Masquer la barre', help: 'Elle s’ouvre quand la souris touche le bord de la fenêtre et se referme quand tu en sors. Raccourci : Ctrl+S.' },
-        chromium ? null : { type: 'number', set: 'sidebarWidth', name: 'largeur', label: 'Largeur', help: 'Tu peux aussi glisser le bord de la barre.', min: 200, max: 440, unit: 'px' },
-        chromium ? null : { type: 'bool', set: 'favHoverPreview', name: 'apercu_favoris', label: 'Aperçu des favoris au survol', help: 'Passe la souris sur un favori (Google Agenda, Gmail…) : la page s’affiche dans une bulle, sans quitter ce que tu fais.' },
+        { type: 'bool', set: 'sidebarAutoHide', name: 'masquer', label: 'Masquer la barre', help: 'Elle s’ouvre quand la souris touche le bord de la fenêtre et se referme quand tu en sors. Raccourci : Ctrl+S.' },
+        { type: 'number', set: 'sidebarWidth', name: 'largeur', label: 'Largeur', help: 'Tu peux aussi glisser le bord de la barre.', min: 200, max: 440, unit: 'px' },
+        { type: 'bool', set: 'favHoverPreview', name: 'apercu_favoris', label: 'Aperçu des favoris au survol', help: 'Passe la souris sur un favori (Google Agenda, Gmail…) : la page s’affiche dans une bulle, sans quitter ce que tu fais.' },
         { type: 'bool', set: 'swipePoulaillers', name: 'glisser_poulaillers', label: 'Glisser pour changer de poulailler', help: 'Un glissement horizontal à deux doigts sur la barre latérale passe au poulailler suivant (comme Arc). Désactivé : glisser fait simplement défiler tes onglets.' },
         { type: 'bool', set: 'autoGroupTabs', name: 'groupes_auto', label: 'Ranger automatiquement en groupes d’œufs', help: 'Quand deux onglets vont ensemble (même site, ou même thème : développement, vidéos, achats…), ils sont réunis côte à côte dans un groupe coloré.' },
         { type: 'actions', items: [{ label: 'Ranger mes onglets maintenant', run: () => { closeOverlay(); groupAuto(); } }] },
@@ -1016,7 +1017,7 @@
         { type: 'bool', set: 'notifSound', name: 'cri_de_poule', label: 'Cri de poule', help: 'Joue un cri de poule pour les alertes, les téléchargements terminés et les notifications des sites.' },
         { type: 'range', set: 'notifVolume', name: 'volume', label: 'Volume', help: '', def: 0.6 },
         { type: 'bool', set: 'mediaPlayer', name: 'mini_lecteur', label: 'Mini-lecteur de musique', help: 'Affiche le morceau en cours (YouTube, YouTube Music, SoundCloud…) avec lecture / pause / suivant, dans la barre.' },
-        chromium ? null : { type: 'bool', set: 'mediaSystem', name: 'musique_windows', label: 'Piloter la musique des applications (Spotify…)', help: 'Affiche et contrôle aussi Spotify ou une autre application qui joue de la musique sur Windows. Spotify Web ne peut pas jouer dans PouleyPwolu (protection DRM) : utilise l’application Spotify.' },
+        { type: 'bool', set: 'mediaSystem', name: 'musique_windows', label: 'Piloter la musique des applications (Spotify…)', help: 'Affiche et contrôle aussi Spotify ou une autre application qui joue de la musique sur Windows. Spotify Web ne peut pas jouer dans PouleyPwolu (protection DRM) : utilise l’application Spotify.' },
         { type: 'actions', help: 'Écouter :', items: [['cot', 'Cot'], ['alerte', 'Alerte'], ['oeuf', 'Téléchargement'], ['notif', 'Notification']].map(([k, l]) => ({ label: '▶ ' + l, run: () => window.PouleySound.play(k, st.notifVolume ?? 0.6) })) },
       ].filter(Boolean);
       case 'productivite': return [
@@ -1093,7 +1094,7 @@
         chromium ? { type: 'actions', help: 'Les extensions installées tournent dans Chromium, comme dans Google Chrome.', items: [
           { label: 'Gérer toutes les extensions', cmd: 'extensions', run: () => { api.cmd('tab.new', { url: 'chrome://extensions' }); } },
         ] } : null,
-        chromium ? null : { type: 'actions', help: 'NadsPDF ouvre automatiquement les PDF du web. Pour un fichier de ton ordinateur :', items: [
+        { type: 'actions', help: 'NadsPDF ouvre automatiquement les PDF du web. Pour un fichier de ton ordinateur :', items: [
           { label: 'Ouvrir NadsPDF', cmd: 'nadspdf', run: () => { closeOverlay(); api.cmd('ext.nadspdf.open'); } },
           { label: 'Ouvrir un PDF de l’ordinateur', cmd: 'nadspdf --fichier', run: () => { closeOverlay(); api.cmd('ext.nadspdf.openFile'); } },
         ] },
@@ -2429,7 +2430,8 @@
 
   // Poignée : glisser pour élargir / rétrécir, ou jusqu'au bord pour masquer.
   $('#side-resizer').addEventListener('pointerdown', async (e) => {
-    if (e.button !== 0 || S().sidebarPosition === 'top') return;
+    // Chromium : la barre est un panneau latéral, voir chromium.js.
+    if (e.button !== 0 || S().sidebarPosition === 'top' || inChromiumBar()) return;
     e.preventDefault();
     const handle = e.currentTarget;
     handle.setPointerCapture(e.pointerId);
@@ -2818,6 +2820,7 @@
     editor: (id) => openPoulaillerEditor(id ? snap.state.poulaillers.find((p) => p.id === id) || null : null),
     group: (id) => { const g = snap.state.poulaillers.flatMap((p) => p.groups || []).find((x) => x.id === id); if (g) openGroupEditor(g); },
     // Panneaux posés sur une page (chromium.js).
+    palette: (mode) => openPalette(mode || 'new'),
     inspector: (tab) => openInspectorTab(tab || 'privacy'),
     aid: async () => { const p = await api.cmd('aidetect.pending', panelRec); if (p) showAidetect(p); else api.cmd('panel.close', panelRec); },
   };

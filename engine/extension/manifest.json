@@ -92,6 +92,18 @@
         "content/json-viewer.js"
       ],
       "run_at": "document_end"
+    },
+    {
+      "matches": [
+        "http://*/*",
+        "https://*/*",
+        "file:///*"
+      ],
+      "js": [
+        "lib/keys.js",
+        "content/raccourcis.js"
+      ],
+      "run_at": "document_start"
     }
   ],
   "web_accessible_resources": [

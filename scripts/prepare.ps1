@@ -62,6 +62,8 @@ New-Item -ItemType Directory -Force $rb | Out-Null
 Copy-Item "$root\engine\rebrand.py" $rb
 Copy-Item "$root\engine\branding" "$rb\branding" -Recurse
 Copy-Item "$root\engine\extension" "$rb\extension" -Recurse
+Copy-Item "$root\engine\nadspdf.key" $rb
+Copy-Item "$root\extensions\nadspdf" "$rb\nadspdf" -Recurse
 $buildPy = "$ucw\build.py"
 # Fins de ligne normalisées : git sur Windows peut récupérer build.py en CRLF.
 $py = [IO.File]::ReadAllText($buildPy) -replace "`r`n", "`n"

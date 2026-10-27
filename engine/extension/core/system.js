@@ -15,7 +15,7 @@ async function freePct() {
 // Onglets éveillés en arrière-plan (ceux qu'on peut endormir).
 function awakeBackground() {
   const out = [];
-  for (const [id, rt] of runtime) if (rt.chromeId != null && id !== current() && !rt.audible && findTab(id)) out.push(id);
+  for (const [id, rt] of runtime) if (rt.chromeId != null && !rt.asleep && id !== current() && !rt.audible && !rt.floating && findTab(id)) out.push(id);
   return out;
 }
 

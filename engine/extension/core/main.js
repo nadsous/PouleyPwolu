@@ -132,11 +132,16 @@ function newTabIndex(p, pinnedCount) {
 // ─────────────────────────────────────────────────────────────────────────────
 // Vues : onglets Chromium
 
+// Fenêtres de l'onglet flottant (core/features.js) : jamais fenêtre principale ni barre.
+// `pending` : fenêtres flottantes en cours de création (windows.onCreated arrive avant).
+export const floatWindows = { ids: new Set(), pending: 0 };
+
 async function mainWindow() {
-  if (mainWindowId != null) {
+  if (mainWindowId != null && !floatWindows.ids.has(mainWindowId)) {
     try { await chrome.windows.get(mainWindowId); return mainWindowId; } catch { mainWindowId = null; }
   }
-  const w = await chrome.windows.getLastFocused({ windowTypes: ['normal'] }).catch(() => null);
+  const all = await chrome.windows.getAll({ windowTypes: ['normal'] }).catch(() => []);
+  const w = all.filter((x) => !floatWindows.ids.has(x.id)).sort((a, b) => Number(b.focused) - Number(a.focused))[0];
   if (w) return (mainWindowId = w.id);
   const created = await chrome.windows.create({ focused: true });
   return (mainWindowId = created.id);
@@ -176,6 +181,7 @@ async function ensureView(recId, active = false) {
   const rt = runtime.get(recId);
   if (rt && rt.chromeId != null) {
     if (active) await chrome.tabs.update(rt.chromeId, { active: true }).catch(() => unbind(recId));
+    else if (rt.asleep) await chrome.tabs.reload(rt.chromeId).catch(() => {});
     return runtime.get(recId);
   }
   if (creating.has(recId)) return creating.get(recId);
@@ -188,7 +194,19 @@ async function ensureView(recId, active = false) {
   return job;
 }
 
-// Met un onglet en veille : son onglet Chromium est fermé, l'onglet reste dans la barre.
+// Met un onglet en veille, comme l'économiseur de mémoire de Chrome : son onglet Chromium
+// est déchargé (la page quitte la mémoire) mais garde son historique, sa session et sa
+// position ; il se recharge tout seul quand on l'affiche.
+function sleepView(recId) {
+  const rt = runtime.get(recId);
+  if (!rt || rt.chromeId == null || rt.asleep || recId === currentTabId) return;
+  rt.asleep = true;
+  chrome.tabs.discard(rt.chromeId).then((tab) => {
+    if (tab && tab.id !== rt.chromeId) { byChrome.delete(rt.chromeId); bind(recId, tab.id); }
+  }).catch(() => { rt.asleep = false; destroyView(recId); scheduleBroadcast(); });
+}
+
+// Retire la vue d'un onglet : son onglet Chromium est fermé, l'onglet reste dans la barre.
 function destroyView(recId) {
   const rt = runtime.get(recId);
   if (!rt || rt.chromeId == null) return;
@@ -401,18 +419,18 @@ const MEMORY_MODES = {
 const memoryMode = () => MEMORY_MODES[S().memoryMode] || MEMORY_MODES.equilibre;
 
 function canSleep(id, rt) {
-  return rt.chromeId != null && id !== currentTabId && !rt.audible && !rt.floating;
+  return rt.chromeId != null && !rt.asleep && id !== currentTabId && !rt.audible && !rt.floating;
 }
 
 function enforceAwakeLimit() {
   const max = memoryMode().maxAwake;
   if (!max) return;
-  const awake = [...runtime.entries()].filter(([, rt]) => rt.chromeId != null);
+  const awake = [...runtime.entries()].filter(([, rt]) => rt.chromeId != null && !rt.asleep);
   if (awake.length <= max) return;
   const sleepable = awake.filter(([id, rt]) => canSleep(id, rt))
     .map(([id]) => ({ id, last: (findTab(id) || { rec: {} }).rec.lastActive || 0 }))
     .sort((a, b) => a.last - b.last);
-  for (const t of sleepable.slice(0, awake.length - max)) destroyView(t.id);
+  for (const t of sleepable.slice(0, awake.length - max)) sleepView(t.id);
   scheduleBroadcast();
 }
 
@@ -424,7 +442,7 @@ function housekeeping() {
     for (const [id, rt] of runtime) {
       if (!canSleep(id, rt)) continue;
       const f = findTab(id);
-      if (f && now - (f.rec.lastActive || 0) > sleepMs) destroyView(id);
+      if (f && now - (f.rec.lastActive || 0) > sleepMs) sleepView(id);
     }
   }
   enforceAwakeLimit();
@@ -619,8 +637,8 @@ function snapshot() {
   for (const [id, r] of runtime) {
     rt[id] = {
       loading: r.loading, canGoBack: r.canGoBack, canGoForward: r.canGoForward, blocked: r.blocked || 0,
-      audible: r.audible, muted: r.muted, awake: r.chromeId != null, https: r.https ?? null,
-      zoom: r.zoom || 1, floating: !!r.floating, badge: 0, memMb: r.memMb || 0, pen: !!r.penOn, agent: null,
+      audible: r.audible, muted: r.muted, awake: r.chromeId != null && !r.asleep, https: r.https ?? null,
+      zoom: r.zoom || 1, floating: !!r.floating, badge: r.badge || 0, memMb: r.memMb || 0, pen: !!r.penOn, agent: null,
     };
   }
   const cur = currentTabId && findTab(currentTabId);
@@ -636,7 +654,6 @@ function snapshot() {
     extensions: [],
     nadspdfApp: false,
     split: null,
-    repo: null,
     maximized: false,
     platform: PLATFORM,
     chromium: true,
@@ -644,7 +661,7 @@ function snapshot() {
     versions: { chromium: (navigator.userAgent.match(/Chrome\/([\d.]+)/) || [])[1] || '' },
     update: { status: 'idle' },
     vault: { exists: false, open: false },
-    userExtensions: userExtensions,
+    userExtensions: userExtensions.map((e) => (extBadges.has(e.id) ? { ...e, badge: extBadges.get(e.id) } : e)),
     security: { stateEncrypted: false, cookies: true, bitlocker: null },
     ...snapshotExtra,
   };
@@ -709,12 +726,12 @@ export const commands = {
   'tab.duplicate': (id) => { const f = findTab(id || currentTabId); if (f) openTab({ url: f.rec.url, poulaillerId: f.poulailler && f.poulailler.id }); },
   'tab.reopen': () => reopenClosed(),
   'tab.zoom': (d) => zoom(Number(d) || 0),
-  'tab.sleep': (id) => { if (id !== currentTabId) { destroyView(id); scheduleBroadcast(); } },
+  'tab.sleep': (id) => { if (id !== currentTabId) { sleepView(id); scheduleBroadcast(); } },
   'tab.menu': (id) => {
     const f = findTab(id);
     if (!f) return;
     const rt = runtime.get(id);
-    const awake = rt && rt.chromeId != null;
+    const awake = rt && rt.chromeId != null && !rt.asleep;
     const others = store.state.poulaillers.filter((p) => !f.poulailler || p.id !== f.poulailler.id);
     popupMenu([
       f.poulailler
@@ -746,7 +763,7 @@ export const commands = {
     if (!p) return;
     popupMenu([
       { label: 'Modifier…', click: () => sendUi('shortcut', 'edit-poulailler:' + id) },
-      { label: 'Mettre tous les onglets en veille', click: () => { for (const t of p.tabs) if (t.id !== currentTabId) destroyView(t.id); scheduleBroadcast(); } },
+      { label: 'Mettre tous les onglets en veille', click: () => { for (const t of p.tabs) if (t.id !== currentTabId) sleepView(t.id); scheduleBroadcast(); } },
       { label: 'Fermer les onglets non épinglés', click: () => { for (const t of p.tabs.filter((x) => !x.pinned)) closeTab(t.id); } },
       { type: 'separator' },
       { label: 'Supprimer le poulailler', enabled: store.state.poulaillers.length > 1, click: () => sendUi('shortcut', 'edit-poulailler:' + id) },
@@ -927,6 +944,8 @@ export const commands = {
 // Extensions du Chrome Web Store (core/extensions.js)
 
 let userExtensions = [];
+// Badges des boutons d'extensions (core/features.js) : id -> { text, color, title }.
+export const extBadges = new Map();
 async function refreshExtensions() {
   userExtensions = await ext.listUserExtensions(store.state.extPins || {});
   scheduleBroadcast();
@@ -1004,6 +1023,15 @@ chrome.tabs.onRemoved.addListener(async (chromeId, info) => {
   closeTab(recId);
 });
 
+// Un onglet déchargé peut changer d'identifiant (anciennes versions de Chromium).
+chrome.tabs.onReplaced.addListener(async (added, removed) => {
+  await ready;
+  const recId = byChrome.get(removed);
+  if (!recId) return;
+  byChrome.delete(removed);
+  bind(recId, added);
+});
+
 chrome.tabs.onActivated.addListener(async ({ tabId }) => {
   await ready;
   const recId = byChrome.get(tabId);
@@ -1036,6 +1064,7 @@ chrome.tabs.onUpdated.addListener(async (chromeId, change, tab) => {
   if (change.title && !/^chrome-extension:\/\/[a-p]{32}\/?$/.test(change.title)) patch.title = change.title;
   if (change.favIconUrl !== undefined) patch.favicon = change.favIconUrl || null;
   if (change.audible !== undefined) rt.audible = change.audible;
+  if (change.discarded !== undefined) rt.asleep = change.discarded;
   if (change.mutedInfo) rt.muted = change.mutedInfo.muted;
   if (Object.keys(patch).length) updateRec(recId, patch);
   if (change.url) autoGroupTab(recId);
@@ -1045,7 +1074,7 @@ chrome.tabs.onUpdated.addListener(async (chromeId, change, tab) => {
 chrome.windows.onFocusChanged.addListener(async (windowId) => {
   if (windowId === chrome.windows.WINDOW_ID_NONE) return;
   const w = await chrome.windows.get(windowId).catch(() => null);
-  if (w && w.type === 'normal') { mainWindowId = windowId; persistBindings(); }
+  if (w && w.type === 'normal' && !floatWindows.ids.has(windowId)) { mainWindowId = windowId; persistBindings(); }
 });
 
 // Bouclier et cookies tiers, d'après les réglages.
@@ -1068,7 +1097,7 @@ async function start() {
   const open = new Map((await chrome.tabs.query({})).map((t) => [t.id, t]));
   // Le service worker a été mis en sommeil : on retrouve les liens.
   for (const [chromeId, recId] of sess.bindings || []) {
-    if (open.has(chromeId) && findTab(recId)) bind(recId, chromeId);
+    if (open.has(chromeId) && findTab(recId)) bind(recId, chromeId).asleep = !!open.get(chromeId).discarded;
   }
   if (sess.mainWindowId != null) mainWindowId = sess.mainWindowId;
   if (sess.currentTabId && findTab(sess.currentTabId)) currentTabId = sess.currentTabId;

@@ -37,7 +37,8 @@ done
 rm -rf "$dir/pouley"
 mkdir -p "$dir/pouley"
 cp "$root/engine/rebrand.py" "$dir/pouley/"
-cp -R "$root/engine/branding" "$root/engine/extension" "$dir/pouley/"
+cp -R "$root/engine/branding" "$root/engine/extension" "$root/engine/nadspdf.key" "$dir/pouley/"
+cp -R "$root/extensions/nadspdf" "$dir/pouley/nadspdf"
 
 # 3. Réglages GN : ajoutés à ceux de la plateforme (la dernière valeur l'emporte).
 flags="$dir/flags.$platform.gn"

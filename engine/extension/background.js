@@ -7,10 +7,11 @@ import './core/system.js';
 import './core/tools.js';
 import './core/features.js';
 import './core/dev.js';
+import './core/shortcuts.js';
+import './core/repo.js';
 
-// La barre PouleyPwolu remplace la barre d'onglets : elle s'ouvre dans chaque fenêtre
-// normale (le moteur l'autorise sans clic pour l'extension intégrée).
+// La barre PouleyPwolu remplace la barre d'onglets : core/layout.js la place dans
+// chaque fenêtre normale (à gauche, à droite ou en haut, masquée ou non).
+import './core/layout.js';
+
 chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch(() => {});
-const openBar = (windowId) => chrome.sidePanel.open({ windowId }).catch(() => {});
-chrome.windows.onCreated.addListener((w) => { if (w.type === 'normal') openBar(w.id); }, { windowTypes: ['normal'] });
-chrome.windows.getAll({ windowTypes: ['normal'] }).then((ws) => ws.forEach((w) => openBar(w.id)));

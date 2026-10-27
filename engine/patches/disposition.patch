@@ -1,0 +1,999 @@
+diff --git a/chrome/browser/extensions/api/pouley_private/pouley_private_api.cc b/chrome/browser/extensions/api/pouley_private/pouley_private_api.cc
+index 3e71f858df..0e1f8c4e1c 100644
+--- a/chrome/browser/extensions/api/pouley_private/pouley_private_api.cc
++++ b/chrome/browser/extensions/api/pouley_private/pouley_private_api.cc
+@@ -8,6 +8,9 @@
+ #include <string>
+ 
+ #include "base/functional/bind.h"
++#include "base/strings/stringprintf.h"
++#include "base/no_destructor.h"
++#include "base/task/sequenced_task_runner.h"
+ #include "base/task/thread_pool.h"
+ #include "build/build_config.h"
+ #include "chrome/browser/extensions/chrome_extension_function_details.h"
+@@ -18,6 +21,7 @@
+ #include "extensions/browser/extension_registry.h"
+ #include "extensions/common/extension.h"
+ #include "ui/gfx/geometry/rect.h"
++#include "url/gurl.h"
+ 
+ #if BUILDFLAG(IS_WIN)
+ #include "chrome/browser/password_manager/pouley_migration.h"
+@@ -123,6 +127,120 @@ PouleyPrivateSetWindowMaterialFunction::Run() {
+       WithArguments(pouley::SetWindowMaterial(params->material)));
+ }
+ 
++ExtensionFunction::ResponseAction
++PouleyPrivateSetSidebarLayoutFunction::Run() {
++  auto params = api::pouley_private::SetSidebarLayout::Params::Create(args());
++  EXTENSION_FUNCTION_VALIDATE(params);
++  std::string error;
++  BrowserWindowInterface* browser = BrowserFor(this, params->window_id, &error);
++  if (!browser) {
++    return RespondNow(Error(std::move(error)));
++  }
++  return RespondNow(WithArguments(
++      pouley::SetSidebarLayout(browser, params->right, params->width)));
++}
++
++ExtensionFunction::ResponseAction PouleyPrivateSetTopBarFunction::Run() {
++  auto params = api::pouley_private::SetTopBar::Params::Create(args());
++  EXTENSION_FUNCTION_VALIDATE(params);
++  std::string error;
++  BrowserWindowInterface* browser = BrowserFor(this, params->window_id, &error);
++  if (!browser) {
++    return RespondNow(Error(std::move(error)));
++  }
++  return RespondNow(WithArguments(
++      pouley::SetTopBar(browser, params->show, params->height,
++                        params->path.value_or(std::string()))));
++}
++
++ExtensionFunction::ResponseAction
++PouleyPrivateSetWindowOpacityFunction::Run() {
++  auto params = api::pouley_private::SetWindowOpacity::Params::Create(args());
++  EXTENSION_FUNCTION_VALIDATE(params);
++  std::string error;
++  BrowserWindowInterface* browser = BrowserFor(this, params->window_id, &error);
++  if (!browser) {
++    return RespondNow(Error(std::move(error)));
++  }
++  return RespondNow(
++      WithArguments(pouley::SetWindowOpacity(browser, params->opacity)));
++}
++
++ExtensionFunction::ResponseAction PouleyPrivateShowPreviewFunction::Run() {
++  auto params = api::pouley_private::ShowPreview::Params::Create(args());
++  EXTENSION_FUNCTION_VALIDATE(params);
++  std::string error;
++  BrowserWindowInterface* browser = BrowserFor(this, params->window_id, &error);
++  if (!browser) {
++    return RespondNow(Error(std::move(error)));
++  }
++  const GURL url(params->url);
++  // Seulement des pages web : l'aperçu ne doit pas ouvrir de page interne.
++  if (!params->url.empty() && !url.SchemeIsHTTPOrHTTPS()) {
++    return RespondNow(Error("Aperçu réservé aux pages web."));
++  }
++  const auto& a = params->anchor;
++  return RespondNow(WithArguments(pouley::ShowPreview(
++      browser, url, gfx::Rect(a.left, a.top, a.width, a.height))));
++}
++
++ExtensionFunction::ResponseAction
++PouleyPrivateGetExtensionBadgesFunction::Run() {
++  auto params = api::pouley_private::GetExtensionBadges::Params::Create(args());
++  EXTENSION_FUNCTION_VALIDATE(params);
++  std::string error;
++  BrowserWindowInterface* browser = BrowserFor(this, params->window_id, &error);
++  if (!browser) {
++    return RespondNow(Error(std::move(error)));
++  }
++  std::vector<api::pouley_private::ExtensionBadge> result;
++  for (auto& badge : pouley::GetExtensionBadges(browser)) {
++    api::pouley_private::ExtensionBadge out;
++    out.extension_id = badge.extension_id;
++    out.text = badge.text;
++    out.color = base::StringPrintf("#%02X%02X%02X", SkColorGetR(badge.color),
++                                   SkColorGetG(badge.color),
++                                   SkColorGetB(badge.color));
++    result.push_back(std::move(out));
++  }
++  return RespondNow(ArgumentList(
++      api::pouley_private::GetExtensionBadges::Results::Create(result)));
++}
++
++ExtensionFunction::ResponseAction PouleyPrivateSystemMediaFunction::Run() {
++  auto params = api::pouley_private::SystemMedia::Params::Create(args());
++  EXTENSION_FUNCTION_VALIDATE(params);
++  // Le script est livré avec l'extension intégrée (data/system-media.ps1).
++  const std::string script = extension()
++                                 ->path()
++                                 .AppendASCII("data")
++                                 .AppendASCII("system-media.ps1")
++                                 .AsUTF8Unsafe();
++  // Une seule séquence : le processus PowerShell répond à une commande à la fois.
++  static base::NoDestructor<scoped_refptr<base::SequencedTaskRunner>> runner(
++      base::ThreadPool::CreateSequencedTaskRunner(
++          {base::MayBlock(), base::TaskPriority::USER_VISIBLE}));
++  (*runner)->PostTaskAndReplyWithResult(
++      FROM_HERE, base::BindOnce(&pouley::RunSystemMedia, script, params->command),
++      base::BindOnce(&PouleyPrivateSystemMediaFunction::OnResult, this));
++  return RespondLater();
++}
++
++void PouleyPrivateSystemMediaFunction::OnResult(std::string result) {
++  Respond(WithArguments(std::move(result)));
++}
++
++ExtensionFunction::ResponseAction PouleyPrivateFocusPageFunction::Run() {
++  auto params = api::pouley_private::FocusPage::Params::Create(args());
++  EXTENSION_FUNCTION_VALIDATE(params);
++  std::string error;
++  BrowserWindowInterface* browser = BrowserFor(this, params->window_id, &error);
++  if (!browser) {
++    return RespondNow(Error(std::move(error)));
++  }
++  return RespondNow(WithArguments(pouley::FocusPage(browser)));
++}
++
+ ExtensionFunction::ResponseAction PouleyPrivateSetAlwaysOnTopFunction::Run() {
+   auto params = api::pouley_private::SetAlwaysOnTop::Params::Create(args());
+   EXTENSION_FUNCTION_VALIDATE(params);
+diff --git a/chrome/browser/extensions/api/pouley_private/pouley_private_api.h b/chrome/browser/extensions/api/pouley_private/pouley_private_api.h
+index fc3f081815..de6636537e 100644
+--- a/chrome/browser/extensions/api/pouley_private/pouley_private_api.h
++++ b/chrome/browser/extensions/api/pouley_private/pouley_private_api.h
+@@ -77,6 +77,75 @@ class PouleyPrivateSetWindowMaterialFunction : public ExtensionFunction {
+   ResponseAction Run() override;
+ };
+ 
++class PouleyPrivateSetSidebarLayoutFunction : public ExtensionFunction {
++ public:
++  DECLARE_EXTENSION_FUNCTION("pouleyPrivate.setSidebarLayout",
++                             POULEYPRIVATE_SETSIDEBARLAYOUT)
++
++ protected:
++  ~PouleyPrivateSetSidebarLayoutFunction() override = default;
++  ResponseAction Run() override;
++};
++
++class PouleyPrivateSetTopBarFunction : public ExtensionFunction {
++ public:
++  DECLARE_EXTENSION_FUNCTION("pouleyPrivate.setTopBar",
++                             POULEYPRIVATE_SETTOPBAR)
++
++ protected:
++  ~PouleyPrivateSetTopBarFunction() override = default;
++  ResponseAction Run() override;
++};
++
++class PouleyPrivateSetWindowOpacityFunction : public ExtensionFunction {
++ public:
++  DECLARE_EXTENSION_FUNCTION("pouleyPrivate.setWindowOpacity",
++                             POULEYPRIVATE_SETWINDOWOPACITY)
++
++ protected:
++  ~PouleyPrivateSetWindowOpacityFunction() override = default;
++  ResponseAction Run() override;
++};
++
++class PouleyPrivateShowPreviewFunction : public ExtensionFunction {
++ public:
++  DECLARE_EXTENSION_FUNCTION("pouleyPrivate.showPreview", UNKNOWN)
++
++ protected:
++  ~PouleyPrivateShowPreviewFunction() override = default;
++  ResponseAction Run() override;
++};
++
++class PouleyPrivateGetExtensionBadgesFunction : public ExtensionFunction {
++ public:
++  DECLARE_EXTENSION_FUNCTION("pouleyPrivate.getExtensionBadges", UNKNOWN)
++
++ protected:
++  ~PouleyPrivateGetExtensionBadgesFunction() override = default;
++  ResponseAction Run() override;
++};
++
++class PouleyPrivateSystemMediaFunction : public ExtensionFunction {
++ public:
++  DECLARE_EXTENSION_FUNCTION("pouleyPrivate.systemMedia", UNKNOWN)
++
++ protected:
++  ~PouleyPrivateSystemMediaFunction() override = default;
++  ResponseAction Run() override;
++
++ private:
++  void OnResult(std::string result);
++};
++
++class PouleyPrivateFocusPageFunction : public ExtensionFunction {
++ public:
++  DECLARE_EXTENSION_FUNCTION("pouleyPrivate.focusPage", UNKNOWN)
++
++ protected:
++  ~PouleyPrivateFocusPageFunction() override = default;
++  ResponseAction Run() override;
++};
++
+ class PouleyPrivateSetAlwaysOnTopFunction : public ExtensionFunction {
+  public:
+   DECLARE_EXTENSION_FUNCTION("pouleyPrivate.setAlwaysOnTop",
+diff --git a/chrome/browser/extensions/component_loader.cc b/chrome/browser/extensions/component_loader.cc
+index fc7b0b65e1..c50e5c996f 100644
+--- a/chrome/browser/extensions/component_loader.cc
++++ b/chrome/browser/extensions/component_loader.cc
+@@ -757,6 +757,12 @@ void ComponentLoader::AddDefaultComponentExtensionsWithBackgroundPages(
+     // --load-component-extension). Identifiant fixé par la clé du manifeste :
+     // dhjkdmdnmjmglljdpbfclbpgphfnapck.
+     AddOrReplace(pouley_dir);
++    // NadsPDF (lecteur et éditeur de PDF de Nads), préinstallé avec son identifiant
++    // du Chrome Web Store : hjbgmlcjbnphhblmmhbjdjmflejflnfh.
++    const base::FilePath nadspdf_dir = pouley_dir.AppendASCII("nadspdf");
++    if (base::PathExists(nadspdf_dir.AppendASCII("manifest.json"))) {
++      AddOrReplace(nadspdf_dir);
++    }
+   }
+ 
+   if (!skip_session_components) {
+diff --git a/chrome/browser/extensions/pouley_dock.h b/chrome/browser/extensions/pouley_dock.h
+index baa31719e3..5ce9160652 100644
+--- a/chrome/browser/extensions/pouley_dock.h
++++ b/chrome/browser/extensions/pouley_dock.h
+@@ -6,6 +6,9 @@
+ #define CHROME_BROWSER_EXTENSIONS_POULEY_DOCK_H_
+ 
+ #include <string>
++#include <vector>
++
++#include "third_party/skia/include/core/SkColor.h"
+ 
+ class BrowserWindowInterface;
+ class GURL;
+@@ -47,6 +50,43 @@ std::string RunExtensionAction(BrowserWindowInterface* browser,
+ // Matière de toutes les fenêtres : "acrylic", "mica" ou "none" (Windows 11).
+ bool SetWindowMaterial(const std::string& material);
+ 
++// Barre PouleyPwolu sur le côté : à droite ou à gauche (toutes les fenêtres du
++// profil), et sa largeur en DIP (0 : inchangée).
++bool SetSidebarLayout(BrowserWindowInterface* browser, bool right, int width);
++
++// Barre PouleyPwolu en haut de la page (`height` en DIP), ou retirée. `path` :
++// page de l'extension intégrée affichée dans la barre (vide : la barre PouleyPwolu).
++bool SetTopBar(BrowserWindowInterface* browser,
++               bool show,
++               int height,
++               const std::string& path);
++
++// Transparence de toute la fenêtre (onglet flottant), de 0,25 à 1.
++bool SetWindowOpacity(BrowserWindowInterface* browser, double opacity);
++
++// Aperçu d'une page (favori survolé) dans une bulle à côté de `anchor` (position
++// dans la barre). `url` vide : ferme l'aperçu.
++bool ShowPreview(BrowserWindowInterface* browser,
++                 const GURL& url,
++                 const gfx::Rect& anchor);
++
++// Badge (texte, couleur) du bouton de chaque extension, pour l'onglet affiché.
++struct ExtensionBadge {
++  std::string extension_id;
++  std::string text;
++  SkColor color = SK_ColorTRANSPARENT;
++};
++std::vector<ExtensionBadge> GetExtensionBadges(BrowserWindowInterface* browser);
++
++// Musique des applications de Windows (Spotify…) : commande « state », « toggle »,
++// « next » ou « prev » envoyée au script data/system-media.ps1 de l'extension intégrée,
++// gardé ouvert ; renvoie sa réponse JSON (vide si indisponible). Bloquant.
++std::string RunSystemMedia(const std::string& script_path,
++                           const std::string& command);
++
++// Donne le clavier à la page affichée.
++bool FocusPage(BrowserWindowInterface* browser);
++
+ // Fenêtre toujours au premier plan (onglet flottant).
+ bool SetAlwaysOnTop(BrowserWindowInterface* browser, bool on_top);
+ 
+diff --git a/chrome/browser/resources/pouley/copy_extension.py b/chrome/browser/resources/pouley/copy_extension.py
+index e0ba6a065b..485ab4f165 100644
+--- a/chrome/browser/resources/pouley/copy_extension.py
++++ b/chrome/browser/resources/pouley/copy_extension.py
+@@ -11,7 +11,8 @@ import shutil
+ import sys
+ 
+ # Sous-dossiers prévus dans chrome/installer/mini_installer/chrome.release.
+-ALLOWED = {'', 'icons', 'sidebar', 'content', 'pages', 'lib', 'data', 'core'}
++ALLOWED = {'', 'icons', 'sidebar', 'content', 'pages', 'lib', 'data', 'core',
++           'nadspdf', 'nadspdf/icons', 'nadspdf/models'}
+ 
+ 
+ def main():
+diff --git a/chrome/browser/ui/views/extensions/pouley_dock.cc b/chrome/browser/ui/views/extensions/pouley_dock.cc
+index a2b6bf0137..8fafd4e16e 100644
+--- a/chrome/browser/ui/views/extensions/pouley_dock.cc
++++ b/chrome/browser/ui/views/extensions/pouley_dock.cc
+@@ -12,12 +12,21 @@
+ #include "base/functional/bind.h"
+ #include "base/functional/callback_helpers.h"
+ #include "base/memory/weak_ptr.h"
++#include "base/no_destructor.h"
+ #include "base/task/sequenced_task_runner.h"
+ #include "chrome/browser/extensions/api/side_panel/side_panel_service.h"
+ #include "chrome/browser/extensions/extension_action_runner.h"
+ #include "chrome/browser/extensions/extension_tab_util.h"
+ #include "chrome/browser/extensions/extension_view_host.h"
+ #include "chrome/browser/extensions/extension_view_host_factory.h"
++#include "chrome/browser/extensions/pouley_drag_region.h"
++#include "chrome/browser/ui/side_panel/side_panel_entry_id.h"
++#include "chrome/browser/ui/side_panel/side_panel_ui.h"
++#include "chrome/common/pref_names.h"
++#include "components/prefs/pref_service.h"
++#include "content/public/browser/web_contents.h"
++#include "components/prefs/scoped_user_pref_update.h"
++#include "extensions/browser/extension_registry.h"
+ #include "build/build_config.h"
+ #include "chrome/browser/profiles/profile.h"
+ #include "chrome/browser/ui/browser_window/public/global_browser_collection.h"
+@@ -35,16 +44,28 @@
+ #include "extensions/common/extension.h"
+ #include "ui/base/metadata/metadata_header_macros.h"
+ #include "ui/base/metadata/metadata_impl_macros.h"
++#include "ui/display/display.h"
++#include "ui/display/screen.h"
+ #include "ui/gfx/geometry/rect.h"
+ #include "ui/gfx/geometry/rounded_corners_f.h"
+ #include "ui/views/bubble/bubble_anchor.h"
+ #include "ui/views/bubble/bubble_border.h"
+ #include "ui/views/controls/native/native_view_host.h"
++#include "ui/views/controls/webview/webview.h"
++#include "ui/base/mojom/dialog_button.mojom.h"
+ #include "ui/views/view.h"
+ #include "ui/views/view_class_properties.h"
+ #include "ui/views/widget/widget.h"
+ 
+ #if BUILDFLAG(IS_WIN)
++#include <windows.h>
++
++#include "base/command_line.h"
++#include "base/files/file_path.h"
++#include "base/process/launch.h"
++#include "base/process/process.h"
++#include "base/synchronization/lock.h"
++#include "base/win/scoped_handle.h"
+ #include "ui/views/win/hwnd_util.h"
+ #endif
+ 
+@@ -112,6 +133,35 @@ class PouleyDockView : public views::View {
+ BEGIN_METADATA(PouleyDockView)
+ END_METADATA
+ 
++// La barre PouleyPwolu en haut de la page : même page que la barre latérale
++// (sidebar/index.html?top=1), dans sa disposition « en haut ».
++class PouleyTopBarView : public views::View {
++  METADATA_HEADER(PouleyTopBarView, views::View)
++
++ public:
++  PouleyTopBarView(Profile* profile,
++                   std::unique_ptr<extensions::ExtensionViewHost> host)
++      : host_(std::move(host)) {
++    SetUseDefaultFillLayout(true);
++    auto view = std::make_unique<ExtensionViewViews>(profile, host_.get());
++    view->SetVisible(true);
++    extension_view_ = AddChildView(std::move(view));
++  }
++  PouleyTopBarView(const PouleyTopBarView&) = delete;
++  PouleyTopBarView& operator=(const PouleyTopBarView&) = delete;
++  ~PouleyTopBarView() override {
++    extension_view_ = nullptr;
++    RemoveAllChildViews();
++  }
++
++ private:
++  std::unique_ptr<extensions::ExtensionViewHost> host_;
++  raw_ptr<ExtensionViewViews> extension_view_ = nullptr;
++};
++
++BEGIN_METADATA(PouleyTopBarView)
++END_METADATA
++
+ MultiContentsView* MultiContentsOf(BrowserWindowInterface* browser) {
+   BrowserView* browser_view =
+       browser ? BrowserView::GetBrowserViewForBrowser(browser) : nullptr;
+@@ -259,12 +309,12 @@ bool SetWindowMaterial(const std::string& material) {
+         if (!widget || !browser_view->GetIsNormalType()) {
+           return true;
+         }
+-        ApplyWindowMaterial(views::HWNDForWidget(widget));
+         if (changed) {
+           widget->FrameTypeChanged();
+           widget->ThemeChanged();
+           widget->GetRootView()->SchedulePaint();
+         }
++        ApplyWindowMaterial(views::HWNDForWidget(widget));
+         return true;
+       });
+   return true;
+@@ -273,6 +323,322 @@ bool SetWindowMaterial(const std::string& material) {
+ #endif
+ }
+ 
++bool SetSidebarLayout(BrowserWindowInterface* browser, bool right, int width) {
++  if (!browser) {
++    return false;
++  }
++  PrefService* pref_service = browser->GetProfile()->GetPrefs();
++  // Le panneau latéral suit ce réglage dans toutes les fenêtres.
++  if (pref_service->GetBoolean(prefs::kSidePanelHorizontalAlignment) !=
++      right) {
++    pref_service->SetBoolean(prefs::kSidePanelHorizontalAlignment, right);
++  }
++  if (width <= 0) {
++    return true;
++  }
++  // Largeur gardée comme si la barre avait été glissée à la main.
++  if (SidePanelUI* ui = SidePanelUI::From(browser)) {
++    if (std::optional<SidePanelEntryId> entry = ui->GetCurrentEntryId()) {
++      ScopedDictPrefUpdate update(pref_service, prefs::kSidePanelIdToWidth);
++      update->Set(SidePanelEntryIdToString(entry.value()), width);
++    }
++  }
++  GlobalBrowserCollection::GetInstance()->ForEach(
++      [width](BrowserWindowInterface* other) {
++        BrowserView* view = BrowserView::GetBrowserViewForBrowser(other);
++        if (view && view->side_panel()) {
++          view->side_panel()->SetPanelWidth(width);
++          view->InvalidateLayout();
++        }
++        return true;
++      });
++  return true;
++}
++
++bool SetTopBar(BrowserWindowInterface* browser,
++               bool show,
++               int height,
++               const std::string& path) {
++  MultiContentsView* mcv = MultiContentsOf(browser);
++  if (!mcv) {
++    return false;
++  }
++  if (!show) {
++    mcv->SetPouleyTopBar(nullptr, 0);
++    return true;
++  }
++  if (mcv->pouley_top_bar()) {
++    mcv->SetPouleyTopBar(nullptr, 0);
++  }
++  const extensions::Extension* extension =
++      extensions::ExtensionRegistry::Get(browser->GetProfile())
++          ->enabled_extensions()
++          .GetByID(kPouleyExtensionId);
++  if (!extension) {
++    return false;
++  }
++  std::unique_ptr<extensions::ExtensionViewHost> host =
++      extensions::ExtensionViewHostFactory::CreateSidePanelHost(
++          *extension,
++          extension->ResolveExtensionURL(path.empty() ? "sidebar/index.html?top=1"
++                                                      : path),
++          browser, /*tab_interface=*/nullptr);
++  if (!host) {
++    return false;
++  }
++  mcv->SetPouleyTopBar(
++      std::make_unique<PouleyTopBarView>(browser->GetProfile(), std::move(host)),
++      std::max(32, height));
++  return true;
++}
++
++bool SetWindowOpacity(BrowserWindowInterface* browser, double opacity) {
++#if BUILDFLAG(IS_WIN)
++  BrowserView* browser_view =
++      browser ? BrowserView::GetBrowserViewForBrowser(browser) : nullptr;
++  if (!browser_view || !browser_view->GetWidget()) {
++    return false;
++  }
++  // Comme Electron (BrowserWindow.setOpacity) : fenêtre « layered », alpha global.
++  HWND hwnd = views::HWNDForWidget(browser_view->GetWidget());
++  const double value = std::clamp(opacity, 0.25, 1.0);
++  LONG ex_style = ::GetWindowLong(hwnd, GWL_EXSTYLE);
++  if (!(ex_style & WS_EX_LAYERED)) {
++    ::SetWindowLong(hwnd, GWL_EXSTYLE, ex_style | WS_EX_LAYERED);
++  }
++  ::SetLayeredWindowAttributes(hwnd, 0, static_cast<BYTE>(value * 255),
++                               LWA_ALPHA);
++  return true;
++#else
++  return false;
++#endif
++}
++
++namespace {
++// Une seule bulle d'aperçu à la fois ; le délégué doit survivre à la bulle.
++struct Preview {
++  std::unique_ptr<views::Widget> widget;
++  std::unique_ptr<views::BubbleDialogDelegate> delegate;
++};
++Preview& CurrentPreview() {
++  static base::NoDestructor<Preview> preview;
++  return *preview;
++}
++void ClosePreview() {
++  CurrentPreview().widget.reset();
++  CurrentPreview().delegate.reset();
++}
++}  // namespace
++
++bool ShowPreview(BrowserWindowInterface* browser,
++                 const GURL& url,
++                 const gfx::Rect& anchor) {
++  ClosePreview();
++  BrowserView* browser_view =
++      browser ? BrowserView::GetBrowserViewForBrowser(browser) : nullptr;
++  if (!browser_view || !url.is_valid()) {
++    return false;
++  }
++  const bool right = browser_view->side_panel() &&
++                     browser_view->side_panel()->IsRightAligned();
++  auto delegate = std::make_unique<views::BubbleDialogDelegate>(
++      views::BubbleAnchor(AnchorFor(browser_view, anchor)),
++      right ? views::BubbleBorder::RIGHT_TOP : views::BubbleBorder::LEFT_TOP,
++      views::BubbleBorder::DIALOG_SHADOW);
++  delegate->SetShowTitle(false);
++  delegate->SetShowCloseButton(false);
++  delegate->SetButtons(static_cast<int>(ui::mojom::DialogButton::kNone));
++  delegate->set_margins(gfx::Insets());
++  // L'aperçu tient dans l'écran (zone de travail, sans la barre des tâches).
++  const gfx::Rect area =
++      display::Screen::Get()
++          ->GetDisplayNearestView(browser_view->GetWidget()->GetNativeView())
++          .work_area();
++  auto web_view = std::make_unique<views::WebView>(browser->GetProfile());
++  web_view->SetPreferredSize(
++      gfx::Size(480, std::clamp(area.height() - 48, 240, 640)));
++  views::WebView* raw = web_view.get();
++  delegate->SetContentsView(std::move(web_view));
++  Preview& preview = CurrentPreview();
++  preview.delegate = std::move(delegate);
++  // Fermée par Chromium (Échap, perte du focus) : détruite juste après.
++  preview.widget = views::BubbleDialogDelegate::CreateBubble(
++      preview.delegate.get(), base::BindOnce([](views::Widget::ClosedReason) {
++        base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
++            FROM_HERE, base::BindOnce(&ClosePreview));
++      }));
++  raw->LoadInitialURL(url);
++  // Placée à côté du favori, puis ramenée dans l'écran s'il dépasse en bas.
++  gfx::Rect bounds = preview.widget->GetWindowBoundsInScreen();
++  bounds.AdjustToFit(area);
++  preview.widget->SetBounds(bounds);
++  preview.widget->ShowInactive();
++  return true;
++}
++
++std::vector<ExtensionBadge> GetExtensionBadges(BrowserWindowInterface* browser) {
++  std::vector<ExtensionBadge> badges;
++  content::WebContents* contents =
++      browser ? browser->GetTabStripModel()->GetActiveWebContents() : nullptr;
++  if (!contents) {
++    return badges;
++  }
++  const int tab_id = extensions::ExtensionTabUtil::GetTabId(contents);
++  auto* manager = extensions::ExtensionActionManager::Get(browser->GetProfile());
++  for (const auto& extension :
++       extensions::ExtensionRegistry::Get(browser->GetProfile())
++           ->enabled_extensions()) {
++    extensions::ExtensionAction* action =
++        manager->GetExtensionAction(*extension);
++    if (!action) {
++      continue;
++    }
++    std::string text = action->GetDisplayBadgeText(tab_id);
++    if (text.empty()) {
++      continue;
++    }
++    badges.push_back(
++        {extension->id(), std::move(text), action->GetBadgeBackgroundColor(tab_id)});
++  }
++  return badges;
++}
++
++#if BUILDFLAG(IS_WIN)
++namespace {
++
++// Processus PowerShell gardé ouvert (comme dans la version Electron) : une commande
++// par ligne sur son entrée, une réponse JSON par ligne sur sa sortie.
++class SystemMediaProcess {
++ public:
++  static SystemMediaProcess& Get() {
++    static base::NoDestructor<SystemMediaProcess> instance;
++    return *instance;
++  }
++
++  std::string Run(const base::FilePath& script, const std::string& command) {
++    base::AutoLock lock(lock_);
++    if (!EnsureStarted(script)) {
++      return std::string();
++    }
++    const std::string line = command + "\n";
++    DWORD written = 0;
++    if (!::WriteFile(stdin_write_.get(), line.data(),
++                     static_cast<DWORD>(line.size()), &written, nullptr)) {
++      Stop();
++      return std::string();
++    }
++    std::string out;
++    char c = 0;
++    DWORD read = 0;
++    while (true) {
++      if (!::ReadFile(stdout_read_.get(), &c, 1, &read, nullptr) || !read) {
++        Stop();
++        return std::string();
++      }
++      if (c == '\n') {
++        break;
++      }
++      if (c != '\r') {
++        out.push_back(c);
++      }
++      if (out.size() > 4 * 1024 * 1024) {
++        Stop();
++        return std::string();
++      }
++    }
++    return out;
++  }
++
++ private:
++  bool EnsureStarted(const base::FilePath& script) {
++    if (process_.IsValid()) {
++      return true;
++    }
++    SECURITY_ATTRIBUTES sa = {sizeof(sa), nullptr, TRUE};
++    HANDLE in_read = nullptr, in_write = nullptr;
++    HANDLE out_read = nullptr, out_write = nullptr;
++    if (!::CreatePipe(&in_read, &in_write, &sa, 0)) {
++      return false;
++    }
++    if (!::CreatePipe(&out_read, &out_write, &sa, 0)) {
++      ::CloseHandle(in_read);
++      ::CloseHandle(in_write);
++      return false;
++    }
++    ::SetHandleInformation(in_write, HANDLE_FLAG_INHERIT, 0);
++    ::SetHandleInformation(out_read, HANDLE_FLAG_INHERIT, 0);
++    base::win::ScopedHandle nul(::CreateFileW(
++        L"NUL", GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, &sa,
++        OPEN_EXISTING, 0, nullptr));
++    base::CommandLine cmd(base::FilePath(L"powershell.exe"));
++    cmd.AppendArg("-NoProfile");
++    cmd.AppendArg("-NonInteractive");
++    cmd.AppendArg("-ExecutionPolicy");
++    cmd.AppendArg("Bypass");
++    cmd.AppendArg("-File");
++    cmd.AppendArgPath(script);
++    cmd.AppendArg("pouley");
++    base::LaunchOptions options;
++    options.start_hidden = true;
++    options.stdin_handle = in_read;
++    options.stdout_handle = out_write;
++    options.stderr_handle = nul.get();
++    options.handles_to_inherit = {in_read, out_write, nul.get()};
++    process_ = base::LaunchProcess(cmd, options);
++    ::CloseHandle(in_read);
++    ::CloseHandle(out_write);
++    stdin_write_.Set(in_write);
++    stdout_read_.Set(out_read);
++    if (!process_.IsValid()) {
++      stdin_write_.Close();
++      stdout_read_.Close();
++      return false;
++    }
++    return true;
++  }
++
++  void Stop() {
++    if (process_.IsValid()) {
++      process_.Terminate(0, false);
++      process_.Close();
++    }
++    stdin_write_.Close();
++    stdout_read_.Close();
++  }
++
++  base::Lock lock_;
++  base::Process process_;
++  base::win::ScopedHandle stdin_write_;
++  base::win::ScopedHandle stdout_read_;
++};
++
++}  // namespace
++#endif
++
++std::string RunSystemMedia(const std::string& script_path,
++                           const std::string& command) {
++#if BUILDFLAG(IS_WIN)
++  if (command != "state" && command != "toggle" && command != "next" &&
++      command != "prev") {
++    return std::string();
++  }
++  return SystemMediaProcess::Get().Run(base::FilePath::FromUTF8Unsafe(script_path),
++                                       command);
++#else
++  return std::string();
++#endif
++}
++
++bool FocusPage(BrowserWindowInterface* browser) {
++  content::WebContents* contents =
++      browser ? browser->GetTabStripModel()->GetActiveWebContents() : nullptr;
++  if (!contents) {
++    return false;
++  }
++  contents->Focus();
++  return true;
++}
++
+ bool SetAlwaysOnTop(BrowserWindowInterface* browser, bool on_top) {
+   BrowserView* browser_view =
+       browser ? BrowserView::GetBrowserViewForBrowser(browser) : nullptr;
+diff --git a/chrome/browser/ui/views/frame/browser_desktop_window_tree_host_win.cc b/chrome/browser/ui/views/frame/browser_desktop_window_tree_host_win.cc
+index 646d715d7a..3ddf435d4f 100644
+--- a/chrome/browser/ui/views/frame/browser_desktop_window_tree_host_win.cc
++++ b/chrome/browser/ui/views/frame/browser_desktop_window_tree_host_win.cc
+@@ -691,6 +691,18 @@ void ApplyWindowMaterial(HWND hwnd) {
+   BOOL dark = TRUE;
+   DwmSetWindowAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE, &dark,
+                         sizeof(dark));
++  // Avec le verre, Windows dessinerait ses boutons réduire / agrandir / fermer
++  // par-dessus la barre PouleyPwolu, qui a déjà les siens : on les lui retire.
++  const LONG style = ::GetWindowLong(hwnd, GWL_STYLE);
++  const LONG wanted = GetWindowMaterial() == WindowMaterial::kNone
++                          ? (style | WS_SYSMENU)
++                          : (style & ~WS_SYSMENU);
++  if (wanted != style) {
++    ::SetWindowLong(hwnd, GWL_STYLE, wanted);
++    ::SetWindowPos(hwnd, nullptr, 0, 0, 0, 0,
++                   SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER |
++                       SWP_NOACTIVATE);
++  }
+ }
+ 
+ }  // namespace pouley
+diff --git a/chrome/browser/ui/views/frame/multi_contents_view.cc b/chrome/browser/ui/views/frame/multi_contents_view.cc
+index fdea87ede6..22b6b5bdb9 100644
+--- a/chrome/browser/ui/views/frame/multi_contents_view.cc
++++ b/chrome/browser/ui/views/frame/multi_contents_view.cc
+@@ -495,6 +495,19 @@ void MultiContentsView::OnReadAnythingOverlayFocused(
+ 
+ // TODO(crbug.com/397777917): Consider using FlexSpecification weights and
+ // interior margins instead of a custom layout once this bug is resolved.
++void MultiContentsView::SetPouleyTopBar(std::unique_ptr<views::View> bar,
++                                        int height) {
++  if (pouley_top_bar_) {
++    std::unique_ptr<views::View> old =
++        RemoveChildViewT(pouley_top_bar_.ExtractAsDangling());
++  }
++  if (bar) {
++    pouley_top_bar_ = AddChildView(std::move(bar));
++  }
++  pouley_top_bar_height_ = height;
++  InvalidateLayout();
++}
++
+ void MultiContentsView::SetPouleyDock(std::unique_ptr<views::View> dock) {
+   if (pouley_dock_) {
+     std::unique_ptr<views::View> old =
+@@ -517,6 +530,17 @@ views::ProposedLayout MultiContentsView::CalculateProposedLayout(
+ 
+   gfx::Rect available_space = gfx::Rect(width, height);
+ 
++  // PouleyPwolu : la barre en haut prend le haut, sur toute la largeur.
++  if (pouley_top_bar_ && pouley_top_bar_->GetVisible()) {
++    const int bar_height =
++        std::min(pouley_top_bar_height_, available_space.height());
++    layouts.child_layouts.emplace_back(
++        pouley_top_bar_.get(), true,
++        gfx::Rect(available_space.x(), available_space.y(),
++                  available_space.width(), bar_height));
++    available_space.Inset(gfx::Insets::TLBR(bar_height, 0, 0, 0));
++  }
++
+   // PouleyPwolu : le panneau d'extension prend la droite, la page rétrécit.
+   if (pouley_dock_ && pouley_dock_->GetVisible()) {
+     constexpr int kDockGap = 8;
+diff --git a/chrome/browser/ui/views/frame/multi_contents_view.h b/chrome/browser/ui/views/frame/multi_contents_view.h
+index 15789223b2..57ab4efc13 100644
+--- a/chrome/browser/ui/views/frame/multi_contents_view.h
++++ b/chrome/browser/ui/views/frame/multi_contents_view.h
+@@ -101,6 +101,11 @@ class MultiContentsView
+   void SetPouleyDock(std::unique_ptr<views::View> dock);
+   views::View* pouley_dock() { return pouley_dock_; }
+ 
++  // PouleyPwolu : barre PouleyPwolu en haut de la page (disposition « en haut »).
++  // `bar` nul : la retire.
++  void SetPouleyTopBar(std::unique_ptr<views::View> bar, int height);
++  views::View* pouley_top_bar() { return pouley_top_bar_; }
++
+   // Show the split view without set any WebContents and update the size and
+   // layout of contents views based on `visual_data`, this is used to prepare
+   // the layout and prevent a re-layout of WebContents.
+@@ -312,6 +317,8 @@ class MultiContentsView
+ 
+   // PouleyPwolu : panneau d'extension à droite de la page.
+   raw_ptr<views::View> pouley_dock_ = nullptr;
++  raw_ptr<views::View> pouley_top_bar_ = nullptr;
++  int pouley_top_bar_height_ = 0;
+ 
+   // The handle responsible for resizing the two contents views as relative to
+   // each other.
+diff --git a/chrome/browser/ui/views/side_panel/side_panel.cc b/chrome/browser/ui/views/side_panel/side_panel.cc
+index 8b6f1d0953..fb810ab67c 100644
+--- a/chrome/browser/ui/views/side_panel/side_panel.cc
++++ b/chrome/browser/ui/views/side_panel/side_panel.cc
+@@ -390,9 +390,10 @@ bool SidePanel::IsRightAligned() const {
+ 
+ gfx::Size SidePanel::GetMinimumSize() const {
+   const int min_height = 0;
+-  return gfx::Size(
+-      SidePanelEntry::kSidePanelDefaultContentWidth + GetBorderInsets().width(),
+-      min_height);
++  // PouleyPwolu : la barre PouleyPwolu se règle de 200 à 440 px (comme dans la
++  // version Electron), au lieu de 360 px minimum.
++  constexpr int kPouleyMinimumWidth = 200;
++  return gfx::Size(kPouleyMinimumWidth + GetBorderInsets().width(), min_height);
+ }
+ 
+ bool SidePanel::IsClosing() {
+diff --git a/chrome/common/extensions/api/pouley_private.json b/chrome/common/extensions/api/pouley_private.json
+index ecb6062cf8..d9d86e1ced 100644
+--- a/chrome/common/extensions/api/pouley_private.json
++++ b/chrome/common/extensions/api/pouley_private.json
+@@ -7,6 +7,25 @@
+     "namespace": "pouleyPrivate",
+     "description": "PouleyPwolu : fenêtres et panneaux des extensions, onglet flottant. Réservé à l'extension intégrée.",
+     "types": [
++      {
++        "id": "ExtensionBadge",
++        "type": "object",
++        "properties": {
++          "extensionId": {"type": "string"},
++          "text": {"type": "string"},
++          "color": {"type": "string"}
++        }
++      },
++      {
++        "id": "Anchor",
++        "type": "object",
++        "properties": {
++          "left": {"type": "integer"},
++          "top": {"type": "integer"},
++          "width": {"type": "integer"},
++          "height": {"type": "integer"}
++        }
++      },
+       {
+         "id": "ActionOptions",
+         "type": "object",
+@@ -81,6 +100,92 @@
+           "parameters": [{"name": "ok", "type": "boolean"}]
+         }
+       },
++      {
++        "name": "setSidebarLayout",
++        "type": "function",
++        "description": "Barre PouleyPwolu à droite ou à gauche, et sa largeur (0 : inchangée).",
++        "parameters": [
++          {"name": "windowId", "type": "integer"},
++          {"name": "right", "type": "boolean"},
++          {"name": "width", "type": "integer"}
++        ],
++        "returns_async": {
++          "name": "callback",
++          "parameters": [{"name": "ok", "type": "boolean"}]
++        }
++      },
++      {
++        "name": "setTopBar",
++        "type": "function",
++        "description": "Barre PouleyPwolu en haut de la page, ou retirée.",
++        "parameters": [
++          {"name": "windowId", "type": "integer"},
++          {"name": "show", "type": "boolean"},
++          {"name": "height", "type": "integer"},
++          {"name": "path", "type": "string", "optional": true}
++        ],
++        "returns_async": {
++          "name": "callback",
++          "parameters": [{"name": "ok", "type": "boolean"}]
++        }
++      },
++      {
++        "name": "setWindowOpacity",
++        "type": "function",
++        "description": "Transparence de toute la fenêtre (onglet flottant), de 0.25 à 1.",
++        "parameters": [
++          {"name": "windowId", "type": "integer"},
++          {"name": "opacity", "type": "number"}
++        ],
++        "returns_async": {
++          "name": "callback",
++          "parameters": [{"name": "ok", "type": "boolean"}]
++        }
++      },
++      {
++        "name": "showPreview",
++        "type": "function",
++        "description": "Aperçu d'une page dans une bulle à côté de la barre (adresse vide : le ferme).",
++        "parameters": [
++          {"name": "windowId", "type": "integer"},
++          {"name": "url", "type": "string"},
++          {"name": "anchor", "$ref": "Anchor"}
++        ],
++        "returns_async": {
++          "name": "callback",
++          "parameters": [{"name": "ok", "type": "boolean"}]
++        }
++      },
++      {
++        "name": "getExtensionBadges",
++        "type": "function",
++        "description": "Badges des boutons d'extensions pour l'onglet affiché.",
++        "parameters": [{"name": "windowId", "type": "integer"}],
++        "returns_async": {
++          "name": "callback",
++          "parameters": [{"name": "badges", "type": "array", "items": {"$ref": "ExtensionBadge"}}]
++        }
++      },
++      {
++        "name": "systemMedia",
++        "type": "function",
++        "description": "Musique des applications de Windows : state, toggle, next ou prev. Réponse JSON.",
++        "parameters": [{"name": "command", "type": "string"}],
++        "returns_async": {
++          "name": "callback",
++          "parameters": [{"name": "result", "type": "string"}]
++        }
++      },
++      {
++        "name": "focusPage",
++        "type": "function",
++        "description": "Donne le clavier à la page affichée (palette ouverte depuis la barre).",
++        "parameters": [{"name": "windowId", "type": "integer"}],
++        "returns_async": {
++          "name": "callback",
++          "parameters": [{"name": "ok", "type": "boolean"}]
++        }
++      },
+       {
+         "name": "setAlwaysOnTop",
+         "type": "function",
+diff --git a/chrome/installer/mini_installer/chrome.release b/chrome/installer/mini_installer/chrome.release
+index 95871d8bd2..e6fcb51b39 100644
+--- a/chrome/installer/mini_installer/chrome.release
++++ b/chrome/installer/mini_installer/chrome.release
+@@ -54,6 +54,9 @@ resources\pouley\pages\*.*: %(VersionDir)s\resources\pouley\pages\
+ resources\pouley\lib\*.*: %(VersionDir)s\resources\pouley\lib\
+ resources\pouley\data\*.*: %(VersionDir)s\resources\pouley\data\
+ resources\pouley\core\*.*: %(VersionDir)s\resources\pouley\core\
++resources\pouley\nadspdf\*.*: %(VersionDir)s\resources\pouley\nadspdf\
++resources\pouley\nadspdf\icons\*.*: %(VersionDir)s\resources\pouley\nadspdf\icons\
++resources\pouley\nadspdf\models\*.*: %(VersionDir)s\resources\pouley\nadspdf\models\
+ locales\*.pak: %(VersionDir)s\Locales
+ 
+ #
+diff --git a/extensions/browser/extension_function_histogram_value.h b/extensions/browser/extension_function_histogram_value.h
+index 0201e8f68a..3730ffae78 100644
+--- a/extensions/browser/extension_function_histogram_value.h
++++ b/extensions/browser/extension_function_histogram_value.h
+@@ -2058,6 +2058,9 @@ enum HistogramValue {
+   POULEYPRIVATE_GETMIGRATIONSTATE = 1993,
+   POULEYPRIVATE_MARKMIGRATIONIMPORTED = 1994,
+   POULEYPRIVATE_SETWINDOWMATERIAL = 1995,
++  POULEYPRIVATE_SETSIDEBARLAYOUT = 1996,
++  POULEYPRIVATE_SETTOPBAR = 1997,
++  POULEYPRIVATE_SETWINDOWOPACITY = 1998,
+   // Last entry: Add new entries above, then run:
+   // tools/metrics/histograms/update_extension_histograms.py
+   ENUM_BOUNDARY

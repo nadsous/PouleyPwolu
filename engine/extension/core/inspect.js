@@ -307,6 +307,8 @@ function framePanel(src, layout) {
   frame.setAttribute('style', 'all:initial;display:block;width:100%;height:100%;border:0;background:transparent;color-scheme:normal;');
   root.append(frame);
   document.documentElement.append(host);
+  // Le clavier va au panneau (palette : on tape tout de suite).
+  frame.addEventListener('load', () => frame.focus());
   return true;
 }
 
@@ -314,7 +316,7 @@ const panels = new Map(); // id d'onglet Chromium -> { kind, tab }
 const pendingAid = new Map(); // id d'onglet Chromium -> résultat à afficher dans la fenêtre IA
 const PANEL_URL = chrome.runtime.getURL('sidebar/index.html');
 
-async function showPanel(recId, kind, tab, layout = 'panel') {
+export async function showPanel(recId, kind, tab, layout = 'panel', { quiet = false } = {}) {
   const chromeId = chromeIdOf(recId);
   if (chromeId == null) return false;
   const src = `${PANEL_URL}?panel=${kind}&rec=${encodeURIComponent(recId)}${tab ? '&tab=' + tab : ''}`;
@@ -323,7 +325,7 @@ async function showPanel(recId, kind, tab, layout = 'panel') {
     panels.set(chromeId, { kind, tab });
     return true;
   } catch {
-    sendUi('toast', { text: 'Rien à inspecter sur cette page : ouvre un site web.' });
+    if (!quiet) sendUi('toast', { text: 'Rien à inspecter sur cette page : ouvre un site web.' });
     return false;
   }
 }
