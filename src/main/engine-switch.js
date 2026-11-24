@@ -1,13 +1,13 @@
-// Passage au moteur Chromium. La 0.1.12 est la dernière version Electron : quand une
-// version Chromium de PouleyPwolu est publiée sur GitHub (fichier moteur.json dans la
+// Passage au nouveau moteur (Firefox). La 0.1.12 est la dernière version Electron : quand une
+// version moteur de PouleyPwolu est publiée sur GitHub (fichier moteur.json dans la
 // dernière version), elle :
 // 1. copie onglets, favoris, poulaillers, réglages, extensions et mots de passe dans
 //    %LOCALAPPDATA%\PouleyPwolu\Migration, chiffrés (AES-256-GCM) par une clé que seule
 //    ta session Windows peut relire (DPAPI) ;
-// 2. télécharge l'installateur Chromium et vérifie son empreinte SHA-256 ;
+// 2. télécharge l'installateur du nouveau moteur et vérifie son empreinte SHA-256 ;
 // 3. le lance puis se ferme : l'installateur retire cette version Electron et le nouveau
 //    navigateur importe le dossier au premier démarrage, puis l'efface.
-// Le format est décrit dans docs/migration-electron.md : le patch Chromium le relit.
+// Le format est décrit dans docs/migration-electron.md : le moteur le relit (engine/extension/experiments/parent.js).
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
@@ -112,7 +112,7 @@ class EngineSwitch {
 
   status() { return { available: !!this.offer, version: this.offer && this.offer.version, busy: this.busy }; }
 
-  // Cherche une version Chromium publiée. Silencieux en cas d'erreur réseau.
+  // Cherche une version moteur publiée. Silencieux en cas d'erreur réseau.
   async check() {
     if (process.platform !== 'win32' || this.busy) return this.status();
     try {
@@ -164,7 +164,7 @@ class EngineSwitch {
 
   // Tout le passage. Renvoie { need: 'vault' } si le coffre doit d'abord être ouvert.
   async run() {
-    if (!this.offer) return { error: 'Aucune version Chromium disponible pour l’instant.' };
+    if (!this.offer) return { error: 'Aucune nouvelle version disponible pour l’instant.' };
     const vault = this.getVault();
     if (vault && vault.exists() && !vault.isOpen()) return { need: 'vault' };
     if (this.busy) return { busy: true };
@@ -180,13 +180,14 @@ class EngineSwitch {
       await this.beforeQuit();
       // --migration indique à l'installateur d'où vient l'utilisateur ; /S : sans questions
       // (l'utilisateur vient d'accepter le passage).
-      // L'installateur de Chromium n'ouvre pas toujours le navigateur à la fin : un petit
+      // L'installateur du moteur n'ouvre pas toujours le navigateur à la fin : un petit
       // script attend la fin de l'installation puis ouvre PouleyPwolu (s'il n'est pas déjà ouvert).
       const q = (s) => "'" + String(s).replace(/'/g, "''") + "'";
-      const chromeExe = path.join(process.env.LOCALAPPDATA || '', 'PouleyPwolu', 'Application', 'chrome.exe');
+      // Nouveau moteur (Firefox) : %LOCALAPPDATA%\PouleyPwolu\Navigateur\pouleypwolu.exe.
+      const chromeExe = path.join(process.env.LOCALAPPDATA || '', 'PouleyPwolu', 'Navigateur', 'pouleypwolu.exe');
       const script = [
         `Start-Process -FilePath ${q(file)} -ArgumentList '/S', ${q('--migration=' + DIR)} -Wait`,
-        `if ((Test-Path ${q(chromeExe)}) -and -not (Get-Process chrome -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq ${q(chromeExe)} })) { Start-Process -FilePath ${q(chromeExe)} }`,
+        `if ((Test-Path ${q(chromeExe)}) -and -not (Get-Process pouleypwolu -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq ${q(chromeExe)} })) { Start-Process -FilePath ${q(chromeExe)} }`,
       ].join('; ');
       spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-WindowStyle', 'Hidden', '-Command', script],
         { detached: true, stdio: 'ignore', windowsHide: true }).unref();

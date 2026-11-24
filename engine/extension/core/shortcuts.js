@@ -5,6 +5,8 @@
 //   Ctrl+E              assistant IA                Ctrl+,        paramètres
 //   Ctrl+D              épingler l'onglet           Ctrl+1…9      poulailler n
 //   Alt+↑ / Alt+↓       poulailler précédent / suivant
+//   Ctrl+/              aide-mémoire des raccourcis (pages/raccourcis.html)
+//   Ctrl+Maj+N          fenêtre Tor (pages/tor.html la première fois)
 // (Ctrl+S, Ctrl+I, Ctrl+Maj+S, Ctrl+Maj+X, Ctrl+Maj+D : core/layout.js et manifest.json.)
 import { store, commands, current, runtime, openTab, snapshotExtra, ready } from './main.js';
 import { showPanel } from './inspect.js';
@@ -38,6 +40,8 @@ const ACTIONS = {
   ai: () => commands['ai.toggle'](),
   settings: () => commands['ui.page']({ name: 'settings' }),
   pin: () => commands['tab.pin'](),
+  shortcuts: () => openTab({ url: 'pouley://raccourcis' }),
+  tor: () => commands['tor.open'](),
   'poulailler-prev': () => cyclePoulailler(-1),
   'poulailler-next': () => cyclePoulailler(1),
 };
@@ -54,6 +58,25 @@ export async function runShortcut(name) {
 }
 
 commands['shortcut.run'] = (name) => runShortcut(name);
+
+// Fenêtre Tor : la page d'avertissement tant qu'elle n'a pas été lue, puis directement.
+commands['tor.open'] = async () => {
+  const P = chrome.pouleyPrivate;
+  if (store.state.settings.torWarned && P && P.openTorWindow) {
+    const st = await P.torStatus().catch(() => null);
+    // Tor déjà connecté : la fenêtre s'ouvre tout de suite ; sinon la page montre la connexion.
+    if (st && st.state === 'ready') return P.openTorWindow().catch(() => openTab({ url: 'pouley://tor' }));
+    return openTab({ url: 'pouley://tor?auto=1' });
+  }
+  return openTab({ url: 'pouley://tor' });
+};
+commands['tor.stop'] = () => chrome.pouleyPrivate && chrome.pouleyPrivate.stopTor();
+chrome.runtime.onMessage.addListener((msg, sender) => {
+  if (msg && msg.type === 'tor.remember' && sender.id === chrome.runtime.id) {
+    ready.then(() => commands['settings.set']({ torWarned: true }));
+  }
+  return false;
+});
 commands['palette.open'] = (mode) => palette(mode === 'edit' || mode === 'split' ? mode : 'new');
 
 chrome.runtime.onMessage.addListener((msg, sender) => {

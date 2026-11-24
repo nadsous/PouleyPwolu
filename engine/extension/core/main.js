@@ -1,4 +1,4 @@
-// Cœur de PouleyPwolu dans Chromium : la logique de src/main/main.js (version Electron),
+// Cœur de PouleyPwolu (moteur Gecko ; les noms « chrome » viennent de l'édition Chromium) : la logique de src/main/main.js (version Electron),
 // avec les onglets Chromium à la place des vues Electron.
 //
 // Comme dans la version Electron, la barre PouleyPwolu est maîtresse : poulaillers,
@@ -12,6 +12,7 @@ import { siteOf } from '../lib/trackers.js';
 import { applyShield } from '../lib/shield.js';
 import * as ext from './extensions.js';
 import { importMigration } from './migration.js';
+import { geckoUrl, tabsCreate, tabsUpdate, isNativeNewTab } from './gecko.js';
 
 const { SEARCH_ENGINES, AI_PROVIDERS, fill, keywordSearch } = self.PouleyConfig;
 const { normalize } = self.PouleyIcons;
@@ -43,14 +44,15 @@ const UI = EXT + 'sidebar/index.html';
 const UI_PAGES = { settings: 'reglages', archive: 'archive', focus: 'plumes', editor: 'poulailler', group: 'groupe' };
 const UI_NAMES = Object.fromEntries(Object.entries(UI_PAGES).map(([k, v]) => [v, k]));
 const toChrome = (url) => {
-  if (!url) return NEWTAB;
+  if (!url || isNativeNewTab(url)) return NEWTAB;
+  url = geckoUrl(url);
   const ui = /^pouley:\/\/([a-z-]+)\/?(?:\?(.*))?$/i.exec(url);
   if (ui && UI_NAMES[ui[1]]) return UI + '?page=' + UI_NAMES[ui[1]] + (ui[2] ? '&' + ui[2] : '');
   const m = /^pouley:\/\/([a-z0-9-]+)\/?(.*)$/i.exec(url);
   return m ? PAGES + m[1] + '.html' + (m[2] ? (m[2].startsWith('?') || m[2].startsWith('#') ? m[2] : '?' + m[2]) : '') : url;
 };
 const fromChrome = (url) => {
-  if (!url || /^chrome:\/\/(newtab|new-tab-page)\//.test(url)) return 'pouley://newtab';
+  if (!url || isNativeNewTab(url)) return 'pouley://newtab';
   if (url.startsWith(UI + '?')) {
     const q = new URLSearchParams(url.slice(UI.length + 1));
     const name = UI_PAGES[q.get('page')];
@@ -64,11 +66,11 @@ const fromChrome = (url) => {
 };
 // Ctrl+T et les autres « nouvel onglet » de Chromium affichent la page PouleyPwolu ;
 // Ctrl+H et Ctrl+J, ses pages Historique et Téléchargements.
-const isChromeNewTab = (url) => /^chrome:\/\/(newtab|new-tab-page)\//.test(url || '');
+const isChromeNewTab = isNativeNewTab;
 const CHROME_PAGES = { history: 'historique', downloads: 'telechargements' };
 const pouleyPageFor = (url) => {
   if (isChromeNewTab(url)) return NEWTAB;
-  const m = /^chrome:\/\/(history|downloads)(\/|$)/.exec(url || '');
+  const m = /^(?:chrome:\/\/|about:)(history|downloads)(\/|$)/.exec(url || '');
   return m ? PAGES + CHROME_PAGES[m[1]] + '.html' : null;
 };
 
@@ -141,7 +143,7 @@ async function mainWindow() {
     try { await chrome.windows.get(mainWindowId); return mainWindowId; } catch { mainWindowId = null; }
   }
   const all = await chrome.windows.getAll({ windowTypes: ['normal'] }).catch(() => []);
-  const w = all.filter((x) => !floatWindows.ids.has(x.id)).sort((a, b) => Number(b.focused) - Number(a.focused))[0];
+  const w = all.filter((x) => !x.incognito && !floatWindows.ids.has(x.id)).sort((a, b) => Number(b.focused) - Number(a.focused))[0];
   if (w) return (mainWindowId = w.id);
   const created = await chrome.windows.create({ focused: true });
   return (mainWindowId = created.id);
@@ -187,7 +189,7 @@ async function ensureView(recId, active = false) {
   if (creating.has(recId)) return creating.get(recId);
   const job = (async () => {
     const windowId = await mainWindow();
-    const tab = await chrome.tabs.create({ windowId, url: toChrome(f.rec.url), active });
+    const tab = await tabsCreate({ windowId, url: toChrome(f.rec.url), active });
     return bind(recId, tab.id);
   })().finally(() => creating.delete(recId));
   creating.set(recId, job);
@@ -345,7 +347,7 @@ function navigate(tabId, input) {
   const url = resolveInput(input);
   updateRec(tabId, { url });
   const rt = runtime.get(tabId);
-  if (rt && rt.chromeId != null) chrome.tabs.update(rt.chromeId, { url: toChrome(url) }).catch(() => {});
+  if (rt && rt.chromeId != null) tabsUpdate(rt.chromeId, { url: toChrome(url) }).catch(() => {});
   else activateTab(tabId);
 }
 
@@ -652,6 +654,7 @@ function scheduleBroadcast() {
   }, 30);
 }
 
+
 function snapshot() {
   const rt = {};
   for (const [id, r] of runtime) {
@@ -938,6 +941,16 @@ export const commands = {
     return chrome.windows.update(id, { state: w.state === 'maximized' ? 'normal' : 'maximized' });
   },
   'window.close': async () => chrome.windows.remove(await mainWindow()),
+  // Zones vides du haut de la barre = barre de titre de la fenêtre (sidebar/chromium.js).
+  'window.dragRegions': async (rects) => {
+    const P = chrome.pouleyPrivate;
+    if (P && P.setDragRegions) {
+      const wins = await chrome.windows.getAll({ windowTypes: ['normal'] }).catch(() => []);
+      for (const w of wins) if (!w.incognito) await P.setDragRegions(w.id, Array.isArray(rects) ? rects : []).catch(() => {});
+      return true;
+    }
+    return false;
+  },
   'views.hidden': () => null,
   // Fond flouté derrière les écrans de l'interface : inutile dans Chromium (la page reste visible).
   capture: () => null,
@@ -961,7 +974,7 @@ export const commands = {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Extensions du Chrome Web Store (core/extensions.js)
+// Extensions d'addons.mozilla.org (core/extensions.js)
 
 let userExtensions = [];
 // Badges des boutons d'extensions (core/features.js) : id -> { text, color, title }.
@@ -989,19 +1002,6 @@ Object.assign(commands, {
   'ext.popup': ({ id } = {}) => sendUi('toast', { text: 'Ouvre cette extension depuis sa page d’options pour l’instant : son bouton arrive bientôt dans la barre.' }),
 });
 
-// Bandeau du Chrome Web Store (content/cws.js).
-chrome.runtime.onMessage.addListener((msg, sender, reply) => {
-  if (msg && msg.type === 'cws.state') {
-    chrome.management.get(msg.id).then(() => reply({ installed: true }), () => reply({ installed: false }));
-    return true;
-  }
-  if (msg && msg.type === 'cws.install') {
-    ext.installFromStore(msg.id, sender.tab && sender.tab.id).then(reply);
-    return true;
-  }
-  return false;
-});
-
 // Pages de PouleyPwolu ouvertes en pleine fenêtre (réglages, accueil…).
 export function openPage(name, query = '') {
   openTab({ url: chrome.runtime.getURL('pages/' + name + '.html') + query });
@@ -1019,7 +1019,8 @@ chrome.tabs.onCreated.addListener((tab) => {
     if ([...creating.keys()].length) await Promise.allSettled([...creating.values()]);
     if (byChrome.has(tab.id)) return;
     const win = await chrome.windows.get(tab.windowId).catch(() => null);
-    if (!win || win.type !== 'normal') return;
+    // Fenêtres privées et Tor : rien n'entre dans les poulaillers.
+    if (!win || win.type !== 'normal' || win.incognito) return;
     const opener = tab.openerTabId != null ? byChrome.get(tab.openerTabId) : null;
     const of = opener && findTab(opener);
     const url = fromChrome(tab.pendingUrl || tab.url);
@@ -1101,7 +1102,13 @@ chrome.windows.onFocusChanged.addListener(async (windowId) => {
 export async function applyPrivacy() {
   const s = S();
   await applyShield(s);
-  await chrome.privacy.websites.thirdPartyCookiesAllowed.set({ value: !s.blockThirdPartyCookies }).catch(() => {});
+  // Firefox : cookies tiers refusés, ou cloisonnés par site (protection totale des cookies).
+  const cookieConfig = chrome.privacy.websites.cookieConfig;
+  if (cookieConfig) {
+    await cookieConfig.set({ value: { behavior: s.blockThirdPartyCookies ? 'reject_third_party' : 'reject_trackers_and_partition_foreign' } }).catch(() => {});
+  } else if (chrome.privacy.websites.thirdPartyCookiesAllowed) {
+    await chrome.privacy.websites.thirdPartyCookiesAllowed.set({ value: !s.blockThirdPartyCookies }).catch(() => {});
+  }
 }
 
 // Traqueurs bloqués par onglet (compteur du bouclier) : core/inspect.js.
@@ -1126,7 +1133,7 @@ async function start() {
   const free = [...open.values()].filter((t) => !byChrome.has(t.id) && t.windowId != null);
   for (const tab of free) {
     const win = await chrome.windows.get(tab.windowId).catch(() => null);
-    if (!win || win.type !== 'normal') continue;
+    if (!win || win.type !== 'normal' || win.incognito) continue;
     const url = fromChrome(tab.pendingUrl || tab.url);
     const known = store.state.poulaillers.flatMap((p) => p.tabs).concat(store.state.favorites)
       .find((r) => r.url === url && !runtime.get(r.id)?.chromeId);
@@ -1147,10 +1154,10 @@ async function start() {
   await refreshExtensions();
   if (oldExtensions) {
     setTimeout(() => sendUi('toast', { text: 'Tes poulaillers, onglets et favoris sont arrivés de l’ancienne version.' }), 1500);
-    // Extensions de l'ancienne version : leur page du Chrome Web Store, pour les réinstaller.
+    // Extensions de l'ancienne version : leur équivalent sur addons.mozilla.org, à réinstaller.
     if (oldExtensions.length) {
       const p = activePoulailler();
-      for (const e of oldExtensions) openTab({ url: 'https://chromewebstore.google.com/detail/' + e.id, background: true, poulaillerId: p.id });
+      for (const e of oldExtensions) openTab({ url: ext.amoUrl(e.name || e.id), background: true, poulaillerId: p.id });
     }
   }
   chrome.alarms.create('pouley-menage', { periodInMinutes: 1 });
@@ -1167,7 +1174,7 @@ chrome.alarms.onAlarm.addListener(async (a) => {
   if (a.name === 'pouley-focus') focusTick();
   if (a.name === 'pouley-extensions') {
     const updates = await ext.checkUpdates();
-    for (const u of updates) sendUi('toast', { text: `${u.name} ${u.to} est disponible : ouvre sa page du Chrome Web Store et clique sur « Mettre à jour ».` });
+    for (const u of updates) sendUi('toast', { text: `${u.name} ${u.to} est disponible.` });
   }
 });
 

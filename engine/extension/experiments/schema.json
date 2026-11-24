@@ -1,0 +1,251 @@
+[
+  {
+    "namespace": "pouleyPrivate",
+    "description": "API privée de PouleyPwolu, réservée à son extension intégrée (moteur Gecko).",
+    "functions": [
+      {
+        "name": "init",
+        "type": "function",
+        "description": "Accorde à l'extension intégrée l'accès à tous les sites et prépare les fenêtres.",
+        "async": true,
+        "parameters": []
+      },
+      {
+        "name": "setSidebar",
+        "type": "function",
+        "description": "Ouvre ou ferme la barre PouleyPwolu dans une fenêtre (toutes si windowId est nul).",
+        "async": true,
+        "parameters": [
+          { "name": "windowId", "type": "integer", "optional": true },
+          { "name": "open", "type": "boolean" }
+        ]
+      },
+      {
+        "name": "setSidebarLayout",
+        "type": "function",
+        "async": true,
+        "parameters": [
+          { "name": "windowId", "type": "integer" },
+          { "name": "right", "type": "boolean" },
+          { "name": "width", "type": "integer" }
+        ]
+      },
+      {
+        "name": "setTopBar",
+        "type": "function",
+        "async": true,
+        "parameters": [
+          { "name": "windowId", "type": "integer" },
+          { "name": "on", "type": "boolean" },
+          { "name": "height", "type": "integer" },
+          { "name": "page", "type": "string", "optional": true }
+        ]
+      },
+      {
+        "name": "setLanguage",
+        "type": "function",
+        "description": "Langue des menus et langue annoncée aux sites (fr, en-US, es-ES, de, it, pt-BR, nl, ar).",
+        "async": true,
+        "parameters": [{ "name": "code", "type": "string" }]
+      },
+      {
+        "name": "setDragRegions",
+        "type": "function",
+        "description": "Zones vides du haut de la barre (en px de la page de la barre) qui servent de barre de titre.",
+        "async": true,
+        "parameters": [
+          { "name": "windowId", "type": "integer" },
+          { "name": "rects", "type": "array", "items": { "type": "object", "properties": { "x": { "type": "number" }, "y": { "type": "number" }, "width": { "type": "number" }, "height": { "type": "number" } } } },
+          { "name": "where", "type": "string", "optional": true }
+        ]
+      },
+      {
+        "name": "startWindowDrag",
+        "type": "function",
+        "description": "Commence à déplacer la fenêtre (clic maintenu sur la barre PouleyPwolu).",
+        "async": true,
+        "parameters": [{ "name": "windowId", "type": "integer" }]
+      },
+      {
+        "name": "focusPage",
+        "type": "function",
+        "async": true,
+        "parameters": [{ "name": "windowId", "type": "integer" }]
+      },
+      {
+        "name": "setAlwaysOnTop",
+        "type": "function",
+        "async": true,
+        "parameters": [
+          { "name": "windowId", "type": "integer" },
+          { "name": "on", "type": "boolean" }
+        ]
+      },
+      {
+        "name": "setWindowOpacity",
+        "type": "function",
+        "async": true,
+        "parameters": [
+          { "name": "windowId", "type": "integer" },
+          { "name": "opacity", "type": "number" }
+        ]
+      },
+      {
+        "name": "setWindowMaterial",
+        "type": "function",
+        "async": true,
+        "parameters": [{ "name": "material", "type": "string" }]
+      },
+      {
+        "name": "getDefaultBrowser",
+        "type": "function",
+        "async": true,
+        "parameters": []
+      },
+      {
+        "name": "setDefaultBrowser",
+        "type": "function",
+        "async": true,
+        "parameters": []
+      },
+      {
+        "name": "getMemoryInfo",
+        "type": "function",
+        "async": true,
+        "parameters": []
+      },
+      {
+        "name": "setClearOnExit",
+        "type": "function",
+        "async": true,
+        "parameters": [{ "name": "on", "type": "boolean" }]
+      },
+      {
+        "name": "getJavascript",
+        "type": "function",
+        "async": true,
+        "parameters": [{ "name": "origin", "type": "string" }]
+      },
+      {
+        "name": "setJavascript",
+        "type": "function",
+        "async": true,
+        "parameters": [
+          { "name": "origin", "type": "string" },
+          { "name": "allow", "type": "boolean" }
+        ]
+      },
+      {
+        "name": "openInternal",
+        "type": "function",
+        "description": "Ouvre une page interne (about:addons…) qu'une extension ne peut pas ouvrir elle-même. Renvoie l'id de l'onglet.",
+        "async": true,
+        "parameters": [
+          {
+            "name": "options",
+            "type": "object",
+            "properties": {
+              "url": { "type": "string" },
+              "windowId": { "type": "integer", "optional": true },
+              "tabId": { "type": "integer", "optional": true },
+              "active": { "type": "boolean", "optional": true }
+            }
+          }
+        ]
+      },
+      {
+        "name": "getFavicon",
+        "type": "function",
+        "description": "Icône d'une page connue de l'historique, en adresse data: (ou chaîne vide).",
+        "async": true,
+        "parameters": [
+          { "name": "pageUrl", "type": "string" },
+          { "name": "size", "type": "integer", "optional": true }
+        ]
+      },
+      {
+        "name": "getExtensionPanel",
+        "type": "function",
+        "async": true,
+        "parameters": [{ "name": "windowId", "type": "integer" }]
+      },
+      {
+        "name": "closeExtensionPanel",
+        "type": "function",
+        "async": true,
+        "parameters": [{ "name": "windowId", "type": "integer" }]
+      },
+      {
+        "name": "runExtensionAction",
+        "type": "function",
+        "async": true,
+        "parameters": [
+          {
+            "name": "options",
+            "type": "object",
+            "properties": {
+              "extensionId": { "type": "string" },
+              "windowId": { "type": "integer" },
+              "left": { "type": "integer", "optional": true },
+              "top": { "type": "integer", "optional": true },
+              "width": { "type": "integer", "optional": true },
+              "height": { "type": "integer", "optional": true }
+            }
+          }
+        ]
+      },
+      {
+        "name": "createSplit",
+        "type": "function",
+        "description": "Met deux onglets côte à côte (vue partagée de Firefox). Renvoie l'id de la vue.",
+        "async": true,
+        "parameters": [{ "name": "tabIds", "type": "array", "items": { "type": "integer" } }]
+      },
+      {
+        "name": "unsplit",
+        "type": "function",
+        "async": true,
+        "parameters": [{ "name": "splitViewId", "type": "integer" }]
+      },
+      {
+        "name": "torStatus",
+        "type": "function",
+        "description": "État de Tor : off, starting ou ready, progression de la connexion (0 à 100), erreur, nombre de fenêtres Tor.",
+        "async": true,
+        "parameters": []
+      },
+      {
+        "name": "openTorWindow",
+        "type": "function",
+        "description": "Démarre Tor si besoin puis ouvre une fenêtre privée dont tout le trafic passe par Tor. Renvoie l'id de la fenêtre.",
+        "async": true,
+        "parameters": []
+      },
+      {
+        "name": "stopTor",
+        "type": "function",
+        "async": true,
+        "parameters": []
+      },
+      {
+        "name": "getMigrationState",
+        "type": "function",
+        "description": "État laissé par la version Electron (docs/migration-electron.md), déchiffré ; importe aussi ses mots de passe dans Firefox. Chaîne vide s'il n'y a rien.",
+        "async": true,
+        "parameters": []
+      },
+      {
+        "name": "markMigrationImported",
+        "type": "function",
+        "async": true,
+        "parameters": []
+      },
+      {
+        "name": "getExtensionBadges",
+        "type": "function",
+        "async": true,
+        "parameters": [{ "name": "windowId", "type": "integer" }]
+      }
+    ]
+  }
+]

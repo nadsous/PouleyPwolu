@@ -11,7 +11,13 @@
   const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
   const hue = (s) => { let x = 0; for (const c of s) x = (x * 31 + c.charCodeAt(0)) % 360; return `hsl(${x} 70% 68%)`; };
   const hostOf = (u) => { try { return new URL(u).hostname.replace(/^www\./, ''); } catch { return ''; } };
-  const icon = (u) => chrome.runtime.getURL('_favicon/') + '?size=32&pageUrl=' + encodeURIComponent(u);
+  // Icône d'une page de l'historique (API privée de PouleyPwolu), chargée après coup.
+  const icons = new Map();
+  const icon = (u) => icons.get(u) || '';
+  const loadIcon = (img, u) => {
+    if (icons.has(u) || !(globalThis.browser && browser.pouleyPrivate || chrome.pouleyPrivate)) return;
+    (globalThis.browser && browser.pouleyPrivate || chrome.pouleyPrivate).getFavicon(u, 32).then((src) => { icons.set(u, src); if (src) img.src = src; }).catch(() => {});
+  };
   const pad = (n) => String(n).padStart(2, '0');
   const toast = (t) => { const e = $('toast'); e.textContent = t; e.classList.add('on'); clearTimeout(toast.t); toast.t = setTimeout(() => e.classList.remove('on'), 1800); };
 
@@ -67,6 +73,7 @@
     r.style.setProperty('--h', hue(host));
     const img = el('img');
     img.src = icon(it.url);
+    loadIcon(img, it.url);
     img.alt = '';
     const txt = el('div', 'txt');
     const url = el('div', 'url');

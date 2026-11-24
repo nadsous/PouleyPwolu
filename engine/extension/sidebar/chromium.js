@@ -146,6 +146,40 @@
     });
   }
 
+  // Haut de la barre = barre de titre : on envoie au navigateur les zones vides du haut
+  // (entre les boutons) ; il y pose de vraies zones de déplacement Windows (glisser vers
+  // un autre écran, double-clic pour agrandir, ancrage). Recalculé quand la barre change.
+  function dragRegions() {
+    const head = document.querySelector('.side-head.drag');
+    if (!head || document.body.classList.contains('page-mode') || document.body.classList.contains('panel-mode')) return [];
+    const h = head.getBoundingClientRect();
+    // Les boutons eux-mêmes (les conteneurs comme .nav s'étirent jusqu'aux boutons de fenêtre).
+    const blocks = [...head.querySelectorAll('button, a, input, .brand, [role="button"]')].map((c) => c.getBoundingClientRect()).filter((r) => r.width > 0).sort((a, b) => a.left - b.left);
+    const out = [];
+    let x = h.left;
+    for (const r of blocks) {
+      if (r.left - x > 6) out.push({ x, y: h.top, width: r.left - x, height: h.height });
+      x = Math.max(x, r.right);
+    }
+    if (h.right - x > 6) out.push({ x, y: h.top, width: h.right - x, height: h.height });
+    // Bande fine tout en haut de la barre, au-dessus des boutons.
+    if (h.top > 4) out.push({ x: h.left, y: 0, width: h.width, height: h.top });
+    return out.map((r) => ({ x: Math.round(r.x), y: Math.round(r.y), width: Math.round(r.width), height: Math.round(r.height) }));
+  }
+  let lastRegions = '';
+  function sendRegions() {
+    const regions = dragRegions();
+    const key = JSON.stringify(regions);
+    if (key === lastRegions) return;
+    lastRegions = key;
+    // Pas de réponse (cœur pas encore prêt) : on réessaiera au prochain passage.
+    api.cmd('window.dragRegions', regions).then((ok) => { if (!ok) lastRegions = ''; }, () => { lastRegions = ''; });
+  }
+  const head = document.querySelector('.side-head');
+  if (head) new ResizeObserver(sendRegions).observe(head);
+  addEventListener('resize', sendRegions);
+  setInterval(sendRegions, 2000); // boutons qui apparaissent ou disparaissent
+
   api.on('clipboard', (text) => {
     navigator.clipboard.writeText(String(text || '')).catch(() => {});
   });

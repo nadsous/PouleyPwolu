@@ -10,3 +10,6 @@ dev-app-update.yml
 
 # Moteur Chromium
 bench/results/
+
+# Python
+__pycache__/

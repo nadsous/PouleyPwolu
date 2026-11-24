@@ -1,0 +1,34 @@
+# Réglages de compilation de PouleyPwolu (moteur Gecko de Firefox).
+# scripts/prepare.py copie ce fichier à la racine des sources de Firefox.
+
+ac_add_options --enable-application=browser
+ac_add_options --with-branding=browser/branding/pouleypwolu
+ac_add_options --with-app-name=pouleypwolu
+ac_add_options --with-app-basename=PouleyPwolu
+# Profils dans %APPDATA%\Nads\PouleyPwolu (et non %APPDATA%\Mozilla) : l'éditeur
+# (MOZ_APP_VENDOR) est changé dans browser/moz.configure par scripts/prepare.py.
+
+# Version publiée : optimisée, sans symboles de débogage ni tests.
+ac_add_options --enable-release
+ac_add_options --enable-optimize
+ac_add_options --disable-debug
+ac_add_options --disable-debug-symbols
+ac_add_options --disable-tests
+
+# Aucune collecte : ni rapport de plantage, ni mises à jour de Mozilla, ni services
+# de Mozilla compilés.
+ac_add_options --disable-crashreporter
+ac_add_options --disable-updater
+ac_add_options --disable-maintenance-service
+ac_add_options --disable-default-browser-agent
+ac_add_options --disable-bits-download
+
+# Les traductions viennent des paquets de langue de Mozilla (voir scripts/prepare.ps1).
+mk_add_options MOZ_OBJDIR=@TOPSRCDIR@/obj-pouleypwolu
+mk_add_options AUTOCLOBBER=1
+
+# Variables d'environnement fixées par scripts/build.ps1 :
+#   MOZ_REQUIRE_SIGNING (vide), MOZ_TELEMETRY_REPORTING (vide), MOZ_SOURCE_* ...
+export MOZ_REQUIRE_SIGNING=
+export MOZ_TELEMETRY_REPORTING=
+export MOZ_DATA_REPORTING=

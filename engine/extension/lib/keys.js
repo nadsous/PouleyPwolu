@@ -19,6 +19,7 @@
     if (e.shiftKey) {
       if (key === 'k') return 'split';
       if (key === 'p') return 'float';
+      if (key === 'n') return 'tor';
       return null;
     }
     if (key === 's') return 'toggle-bar';
@@ -27,6 +28,7 @@
     if (key === 'e') return 'ai';
     if (key === ',') return 'settings';
     if (key === 'd') return 'pin';
+    if (key === '/') return 'shortcuts';
     if (/^[1-9]$/.test(key)) return 'poulailler:' + key;
     return null;
   }

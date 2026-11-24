@@ -1,4 +1,6 @@
 // Page Nouvel onglet (reprise de src/pages/newtab.html) : moteur et IA lus dans les réglages.
+// Dans une fenêtre Tor (privée), le nouvel onglet est la page d'accueil Tor.
+if (chrome.extension && chrome.extension.inIncognitoContext) location.replace('tor-accueil.html');
 (async () => {
   const { SEARCH_ENGINES, AI_PROVIDERS, fill } = PouleyConfig;
   const { state } = await chrome.storage.local.get('state');

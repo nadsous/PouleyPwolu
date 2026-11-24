@@ -1,69 +1,44 @@
-﻿# Compile le moteur puis crée l'installateur et le zip.
-#   powershell -File scripts\build.ps1 [-Work C:\pw] [-Jobs 16] [-Clean]
-# À lancer dans un PowerShell administrateur. La première compilation prend plusieurs
-# heures ; les suivantes ne recompilent que ce qui a changé.
-# -Clean efface la compilation (pas les sources téléchargées). Il le faut après un échec
-# avant la compilation proprement dite (téléchargement, patches), ou quand les patches,
-# les réglages ou la version figée ont changé : le script le signale.
+# Prépare les sources puis compile PouleyPwolu (moteur Firefox) avec les outils de Mozilla.
+#   powershell -ExecutionPolicy Bypass -File scripts\build.ps1 [-Etape bootstrap|build|package|tout]
+# Résultat : <sources>\obj-pouleypwolu\dist\ (zip et installateur dans dist\install\sea).
+# mach est lancé depuis Windows (scripts\mach.cmd), pas depuis le shell de MozillaBuild.
 param(
-  [string]$Work = $(if ($env:POULEY_WORK) { $env:POULEY_WORK } else { 'C:\pw' }),
-  [int]$Jobs = 0,
-  [switch]$Clean
+  [ValidateSet('bootstrap', 'build', 'package', 'tout')][string]$Etape = 'tout'
 )
 $ErrorActionPreference = 'Stop'
-
-$admin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
-if (-not $admin) { throw 'Lance ce script dans un PowerShell administrateur (ungoogled-chromium-windows le demande).' }
-
-& "$PSScriptRoot\check-env.ps1" -Work $Work
-if ($LASTEXITCODE) { exit 1 }
-& "$PSScriptRoot\prepare.ps1" -Work $Work
-
-$root = Split-Path $PSScriptRoot -Parent
-$ucw = Join-Path $Work 'ucw'
-$build = "$ucw\build"
-# Sources à moitié préparées (compilation arrêtée pendant la décompression) : build.py ne
-# saurait pas les reprendre, on repart de zéro en gardant les archives téléchargées.
-if (-not $Clean -and (Test-Path "$build\src") -and -not (Test-Path "$build\src\BUILD.gn")) {
-  Write-Host 'Sources incomplètes d''une compilation interrompue : nettoyage.'
-  $Clean = $true
-}
-if ($Clean -and (Test-Path $build)) {
-  Get-ChildItem $build -Force | Where-Object { $_.Name -ne 'download_cache' } | Remove-Item -Recurse -Force
+$depot = Resolve-Path (Join-Path $PSScriptRoot '..')
+$lock = Get-Content (Join-Path $depot 'engine\source.lock.json') -Raw | ConvertFrom-Json
+$work = if ($env:POULEY_WORK) { $env:POULEY_WORK } else { $lock.work }
+$src = Join-Path $work ("src\firefox-" + $lock.firefox)
+if (-not (Test-Path 'C:\mozilla-build\python3\python3.exe')) {
+  throw 'MozillaBuild manque : https://ftp.mozilla.org/pub/mozilla/libraries/win32/MozillaBuildSetup-Latest.exe'
 }
 
-# Empreinte de tout ce qui façonne les sources : si elle change, les sources déjà
-# préparées ne correspondent plus, et build.py ne les referait pas de lui-même.
-$inputs = @(Get-Item "$root\engine\source.lock.json", "$root\engine\flags.gn") + @(Get-ChildItem "$root\engine\patches" -Recurse -File | Sort-Object FullName)
-$sha = [Security.Cryptography.SHA256]::Create()
-$stampNow = -join ($inputs | ForEach-Object { [BitConverter]::ToString($sha.ComputeHash([IO.File]::ReadAllBytes($_.FullName))) })
-$stamp = "$build\pouley.stamp"
-if (Test-Path "$build\src\BUILD.gn") {
-  if (-not (Test-Path $stamp) -or (Get-Content $stamp -Raw).Trim() -ne $stampNow) {
-    throw 'Les patches, les réglages ou la version ont changé depuis la préparation des sources : relance avec -Clean.'
-  }
-} else {
-  New-Item -ItemType Directory -Force $build | Out-Null
-  Set-Content $stamp $stampNow
+python (Join-Path $depot 'scripts\prepare.py') $src
+if ($LASTEXITCODE -ne 0) { throw "prepare.py a échoué ($LASTEXITCODE)" }
+
+$mach = Join-Path $depot 'scripts\mach.cmd'
+function Invoke-Mach {
+  & cmd.exe /c "`"$mach`" `"$src`" $args < NUL"
+  if ($LASTEXITCODE -ne 0) { throw "mach $args a échoué ($LASTEXITCODE)" }
 }
 
-# --tarball : archive officielle de Chromium vérifiée par empreinte, plus légère qu'un clone git.
-# --ci : ne prépare les sources que si elles manquent, puis reprend la compilation là où elle
-# s'était arrêtée. build.py coupe alors ninja toutes les 3 h 30 (code 124) : on relance.
-$pyArgs = @('build.py', '--tarball', '--ci')
-if ($Jobs -gt 0) { $pyArgs += @('-j', $Jobs) }
-$started = Get-Date
-Push-Location $ucw
-try {
-  do {
-    # Passé par cmd : PowerShell 5.1 transforme sinon chaque ligne de stderr (la progression
-    # de curl, par exemple) en erreur, et $ErrorActionPreference = 'Stop' arrête tout.
-    cmd /c "python3 $($pyArgs -join ' ') 2>&1"
-    $code = $LASTEXITCODE
-    if ($code -eq 124) { Write-Host 'Pause de build.py après 3 h 30, reprise de la compilation…' }
-  } while ($code -eq 124)
-  if ($code) { throw "build.py a échoué ($code). Si l'erreur est arrivée avant la compilation (téléchargement, patches), relance avec -Clean." }
-} finally { Pop-Location }
-
-Write-Host ("Compilé en {0:hh\:mm}. Installateur et zip dans $build :" -f ((Get-Date) - $started))
-Get-ChildItem $build -File | Where-Object { $_.Extension -in '.exe', '.zip' } | ForEach-Object { Write-Host "  $($_.Name)" }
+if ($Etape -in 'bootstrap', 'tout') { Invoke-Mach --no-interactive bootstrap --application-choice browser }
+if ($Etape -in 'build', 'tout') { Invoke-Mach build }
+if ($Etape -in 'package', 'tout') {
+  Invoke-Mach package
+  # Installateur NSIS du moteur (dist\pouleypwolu-<version>.en-US.win64.installer.exe) :
+  # cible « installer » de browser/installer/windows, à partir du zip de « mach package ».
+  $obj = Join-Path $src 'obj-pouleypwolu'
+  $zip = Get-ChildItem (Join-Path $obj 'dist') -Filter 'pouleypwolu-*.win64.zip' | Select-Object -First 1
+  if (-not $zip) { throw 'Paquet zip introuvable après « mach package ».' }
+  $mozmake = Join-Path $(if ($env:MOZBUILD_STATE_PATH) { $env:MOZBUILD_STATE_PATH } else { Join-Path $env:USERPROFILE '.mozbuild' }) 'mozmake\mozmake.exe'
+  $env:MOZILLABUILD = 'C:\mozilla-build\'
+  $vieuxPath = $env:PATH
+  $env:PATH = "$env:SystemRoot\system32;$env:SystemRoot;C:\mozilla-build\python3;C:\mozilla-build\bin;C:\mozilla-build\msys2\usr\bin"
+  try {
+    & $mozmake -C (Join-Path $obj 'browser\installer\windows') installer "ZIP_IN=$($zip.FullName -replace '\\', '/')"
+    if ($LASTEXITCODE -ne 0) { throw "Installateur du moteur : échec ($LASTEXITCODE)" }
+  } finally { $env:PATH = $vieuxPath }
+}
+Write-Output "PouleyPwolu compilé : $src\obj-pouleypwolu\dist"

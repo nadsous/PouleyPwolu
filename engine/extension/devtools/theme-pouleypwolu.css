@@ -1,0 +1,107 @@
+/* Outils de développement (F12) aux couleurs de PouleyPwolu : thème sombre « Nads »,
+   code en JetBrains Mono un peu plus grand, coloration syntaxique plus lisible, réseau
+   et inspecteur mieux contrastés. Feuille utilisateur chargée par experiments/parent.js,
+   limitée aux pages des outils (chrome://devtools/). */
+@-moz-document url-prefix("chrome://devtools/") {
+  @font-face {
+    font-family: "PouleyPwolu Mono";
+    src: url("resource://builtin-addons/pouleypwolu/sidebar/JetBrainsMono-Regular.ttf");
+  }
+
+  :root.theme-dark {
+    /* Fonds : socle presque noir, panneaux légèrement relevés */
+    --theme-body-background: #141416 !important;
+    --theme-body-emphasized-background: #1f1f23 !important;
+    --theme-body-alternate-emphasized-background: #22222a !important;
+    --theme-sidebar-background: #111113 !important;
+    --theme-tab-toolbar-background: #0e0e10 !important;
+    --theme-toolbar-background: #111113 !important;
+    --theme-toolbar-alternate-background: #18181b !important;
+    --theme-toolbar-background-alt: #18181b !important;
+    --theme-toolbar-background-hover: #1f1f23 !important;
+    --theme-toolbar-hover: #1f1f23 !important;
+    --theme-toolbar-alternate-hover: #26262a !important;
+    --theme-toolbar-hover-active: #26262a !important;
+    --theme-toolbar-color: #a1a1aa !important;
+    --theme-toolbar-selected-color: #ffe100 !important;
+    --theme-toolbar-highlighted-color: #4ade80 !important;
+    --theme-toolbar-background-highlighted: #1565d8 !important;
+    --theme-toolbar-separator: rgba(255, 255, 255, 0.07) !important;
+    --toolbarbutton-background: #1f1f23 !important;
+    --toolbarbutton-hover-background: #26262a !important;
+    --theme-popup-background: #1b1b1e !important;
+
+    /* Sélection : jaune de la poule, discret */
+    --theme-selection-background: #3a3410 !important;
+    --theme-selection-color: #fff8c2 !important;
+    --theme-selection-background-hover: #1f1f23 !important;
+    --theme-selection-focus-background: #2f2f34 !important;
+    --theme-text-selection-background: #3a3410 !important;
+
+    /* Séparateurs et icônes */
+    --theme-splitter-color: rgba(255, 255, 255, 0.08) !important;
+    --theme-emphasized-splitter-color: rgba(255, 255, 255, 0.14) !important;
+    --theme-emphasized-splitter-color-hover: #ffe100 !important;
+    --theme-icon-color: rgba(244, 244, 245, 0.72) !important;
+    --theme-icon-checked-color: #ffe100 !important;
+    --theme-focus-outline-color: #ffe100 !important;
+
+    /* Texte */
+    --theme-body-color: #c9c9d0 !important;
+    --theme-text-color-strong: #f4f4f5 !important;
+    --theme-text-color-alt: #8b8b95 !important;
+    --theme-text-color-inactive: #6b6b76 !important;
+    --theme-comment: #6b6b76 !important;
+    --theme-link-color: #7cb3ff !important;
+
+    /* Coloration du code (HTML, CSS, JS, réseau) : palette claire et distincte */
+    --theme-highlight-green: #a3e635 !important;
+    --theme-highlight-blue: #7cb3ff !important;
+    --theme-highlight-purple: #c4a1ff !important;
+    --theme-highlight-red: #ff8a8a !important;
+    --theme-highlight-pink: #f9a8d4 !important;
+    --theme-highlight-orange: #fdba74 !important;
+    --theme-highlight-lightorange: #ffe100 !important;
+    --theme-highlight-bluegrey: #94a3b8 !important;
+    --theme-highlight-gray: #e4e4e7 !important;
+
+    /* Code plus lisible */
+    --monospace-font-family: "PouleyPwolu Mono", "Cascadia Mono", Consolas, monospace !important;
+    --theme-code-font-size: 12px !important;
+    --theme-code-line-height: calc(16 / 12) !important;
+  }
+
+  /* Onglets des outils : l'outil ouvert souligné en jaune */
+  :root.theme-dark .devtools-tab.selected {
+    color: #ffe100 !important;
+  }
+  :root.theme-dark .devtools-tab.selected::before {
+    background: #ffe100 !important;
+  }
+
+  /* Réseau : lignes aérées, survol et sélection nets */
+  :root.theme-dark .requests-list-row-group .request-list-item {
+    height: 26px !important;
+  }
+  :root.theme-dark .request-list-item:not(.selected):hover {
+    background: #1f1f23 !important;
+  }
+  :root.theme-dark .request-list-item.selected {
+    background: #3a3410 !important;
+    color: #fff8c2 !important;
+  }
+  :root.theme-dark .requests-list-status-code[data-code^="2"] { color: #4ade80 !important; }
+  :root.theme-dark .requests-list-status-code[data-code^="3"] { color: #7cb3ff !important; }
+  :root.theme-dark .requests-list-status-code[data-code^="4"],
+  :root.theme-dark .requests-list-status-code[data-code^="5"] { color: #ff8a8a !important; }
+
+  /* Inspecteur : balises arrondies, nœud sélectionné bien visible */
+  :root.theme-dark .tag-line .tag-state.theme-selected {
+    background: #3a3410 !important;
+    border-radius: 4px;
+  }
+  :root.theme-dark .tag-line:hover > .tag-state:not(.theme-selected) {
+    background: #1f1f23 !important;
+    border-radius: 4px;
+  }
+}

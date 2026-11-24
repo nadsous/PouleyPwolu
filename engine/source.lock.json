@@ -1,22 +1,23 @@
 {
-  "chromium": "155.0.8059.84",
-  "windows": {
-    "repository": "https://github.com/ungoogled-software/ungoogled-chromium-windows.git",
-    "tag": "155.0.8059.84-1.1",
-    "commit": "9d0cd624438cd90148b38f34abcded048b6cd62c"
+  "firefox": "160.0.1",
+  "url": "https://archive.mozilla.org/pub/firefox/releases/160.0.1/source/firefox-160.0.1.source.tar.xz",
+  "sha256": "7b9d95ddf24f7bbf5d0d05698bc02a66dac1eca438f80e093c5c76af7648b06d",
+  "langues": {
+    "url": "https://archive.mozilla.org/pub/firefox/releases/160.0.1/win64/xpi/{code}.xpi",
+    "sha256": {
+      "fr": "55b229b1718c8d29aad8051faafc68de882d4ff401a65624d9da47aae6608099",
+      "es-ES": "9c93d3b67ac28c0552a5cbaaa068533c36d9ae902a5e8f5098f88b18335f92c0",
+      "de": "337d51527b933645023ca104b1ca3335a79f0c59a0c7a1166ca60a5d35bbe9ff",
+      "it": "d098610fa6a453c6643ba07f44899e313d258bd127b8d570533d4bc4300d6bbc",
+      "pt-BR": "3d4331be8e2317553ef5a158d1798ad698ca0a4d03082d7226d4f1c843b60b54",
+      "nl": "97213437ea0a06ec21e48c7d0a9e3de0d54d5744d25bc8ea99217cf1984ebc3b",
+      "ar": "3cf833e9bd4abcaa775702ab2dcd7c66e9ee451d98e1cac91cc3622c4263784b"
+    }
   },
-  "ungoogled": {
-    "repository": "https://github.com/ungoogled-software/ungoogled-chromium.git",
-    "commit": "c7b4b99027bb6f9f33848fdbee8a319a3ba3b238"
+  "tor": {
+    "version": "16.0.1",
+    "url": "https://archive.torproject.org/tor-package-archive/torbrowser/16.0.1/tor-expert-bundle-windows-x86_64-16.0.1.tar.gz",
+    "sha256": "9eed3c3ff1fe43df034ce360196c9ec95472560d77ff55614d0cd5120edea27b"
   },
-  "macos": {
-    "repository": "https://github.com/ungoogled-software/ungoogled-chromium-macos.git",
-    "tag": "155.0.8059.84-1.1",
-    "commit": "28552f14731fe8f60422e19bbc2361468d420b25"
-  },
-  "linux": {
-    "repository": "https://github.com/ungoogled-software/ungoogled-chromium-portablelinux.git",
-    "tag": "155.0.8059.84-1",
-    "commit": "9e6902e95b2a01cc35548c101ff9c38d6c2ec90a"
-  }
+  "work": "C:\\pwff"
 }

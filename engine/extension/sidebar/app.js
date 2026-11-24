@@ -18,6 +18,8 @@
   const { SEARCH_ENGINES, AI_PROVIDERS, POULAILLER_COLORS, KEYWORDS, REPO_SHORT, keywordSearch, fill } = window.PouleyConfig;
   const Sp = window.PouleySprites;
   const I = window.PouleyIcons;
+  // Icônes Iconoir de index.html : <svg data-i="nom"> (voir lib/icons.js).
+  for (const el of document.querySelectorAll('svg[data-i]')) el.innerHTML = I.raw(el.dataset.i);
   const B = window.PouleyBrands;
   // Logo officiel (assistant IA ou moteur de recherche) dans un <span>.
   const logo = (key, cls) => { const s = document.createElement('span'); s.className = 'logo-slot' + (cls ? ' ' + cls : ''); s.innerHTML = B.svg(key); return s; };
@@ -49,19 +51,11 @@
     s.innerHTML = inner;
     return s;
   };
+  // Icônes Iconoir (lib/icons.js), sous les noms qu'utilisait app.js.
   const ICONS = {
-    x: '<path d="M7 7l10 10M17 7L7 17"/>',
-    sound: '<path d="M4 9v6h4l5 4V5L8 9z"/><path d="M16 9a4 4 0 0 1 0 6"/>',
-    muted: '<path d="M4 9v6h4l5 4V5L8 9z"/><path d="M17 9l4 6M21 9l-4 6"/>',
-    lock: '<rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>',
-    unlock: '<rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 7.5-2"/>',
-    search: '<circle cx="11" cy="11" r="6"/><path d="M20 20l-4.5-4.5"/>',
-    globe: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/>',
-    spark: '<path d="M12 3l1.8 4.7L18.5 9.5l-4.7 1.8L12 16l-1.8-4.7L5.5 9.5l4.7-1.8z"/>',
-    tab: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 9h18"/>',
-    cmd: '<path d="M9 6a3 3 0 1 0-3 3h12a3 3 0 1 0-3-3v12a3 3 0 1 0 3-3H6a3 3 0 1 0 3 3z"/>',
-    archive: '<rect x="3" y="4" width="18" height="5" rx="1"/><path d="M5 9v10h14V9M10 13h4"/>',
-    home: '<path d="M4 11l8-7 8 7v9H4z"/>',
+    x: I.raw('x'), sound: I.raw('son'), muted: I.raw('muet'), lock: I.raw('cadenas'), unlock: I.raw('ouvert'),
+    search: I.raw('recherche'), globe: I.raw('globe'), spark: I.raw('ia'), tab: I.raw('onglet'),
+    cmd: I.raw('commande'), archive: I.raw('archive'), home: I.raw('accueil'),
   };
   const pouleSvg = () => Sp.toSvg(Sp.POULE);
   const pouleMini = () => h('span', { class: 'poule-mini', html: pouleSvg() });
@@ -105,7 +99,7 @@
   }
   const internalTitle = (url) => {
     const host = (url || '').replace('pouley://', '').split(/[/?]/)[0];
-    return { newtab: 'Nouvel onglet', jeu: 'Pouley contre le Renard', offline: 'Hors ligne', erreur: 'Erreur', onboarding: 'Bienvenue', reglages: 'Paramètres', archive: 'Archive', plumes: 'Mon poulailler du jour', poulailler: 'Poulailler', groupe: 'Groupe d’œufs', historique: 'Historique', telechargements: 'Téléchargements', json: 'JSON' }[host] || 'PouleyPwolu';
+    return { newtab: 'Nouvel onglet', raccourcis: 'Raccourcis clavier', tor: 'Fenêtre Tor', jeu: 'Pouley contre le Renard', offline: 'Hors ligne', erreur: 'Erreur', onboarding: 'Bienvenue', reglages: 'Paramètres', archive: 'Archive', plumes: 'Mon poulailler du jour', poulailler: 'Poulailler', groupe: 'Groupe d’œufs', historique: 'Historique', telechargements: 'Téléchargements', json: 'JSON' }[host] || 'PouleyPwolu';
   };
 
   function favicon(rec, cls = 'fi') {
@@ -152,8 +146,8 @@
     $('#btn-back').disabled = !rt.canGoBack;
     $('#btn-forward').disabled = !rt.canGoForward;
     $('#btn-reload').innerHTML = rt.loading
-      ? '<svg viewBox="0 0 24 24"><path d="M7 7l10 10M17 7L7 17"/></svg>'
-      : '<svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.3-5.6M20 4v5h-5"/></svg>';
+      ? `<svg viewBox="0 0 24 24">${I.raw('x')}</svg>`
+      : `<svg viewBox="0 0 24 24">${I.raw('rafraichir')}</svg>`;
     $('#btn-reload').title = rt.loading ? 'Arrêter' : 'Recharger (Ctrl+R)';
 
     // Adresse
@@ -477,6 +471,86 @@
     }));
   }
 
+  // ───────────────────────────────────────────── changer de poulailler
+  // Le nom du poulailler, au-dessus des onglets, ouvre la liste de tous les poulaillers :
+  // nom, couleur, raccourci. On y crée et modifie aussi les poulaillers, et on peut y
+  // déposer un onglet pour l'y ranger. (Barre du haut : les pastilles du bas, inchangées.)
+  let spaceMenu = null;
+  function closeSpaceMenu() {
+    if (!spaceMenu) return;
+    const m = spaceMenu;
+    spaceMenu = null;
+    $('#poulailler-title').setAttribute('aria-expanded', 'false');
+    document.removeEventListener('mousedown', spaceMenuOutside, true);
+    window.removeEventListener('blur', closeSpaceMenu);
+    // Sortie plus rapide que l'entrée.
+    m.classList.add('closing');
+    setTimeout(() => m.remove(), 120);
+  }
+  function spaceMenuOutside(e) {
+    if (spaceMenu && !spaceMenu.contains(e.target) && !$('#poulailler-title').contains(e.target)) closeSpaceMenu();
+  }
+  function toggleSpaceMenu(fromKeyboard) {
+    if (spaceMenu) return closeSpaceMenu();
+    const title = $('#poulailler-title');
+    const head = title.closest('.poulailler-head');
+    const r = head.getBoundingClientRect();
+    const t = title.getBoundingClientRect();
+    const current = snap.state.activePoulailler;
+    const go = (fn) => () => { closeSpaceMenu(); fn(); };
+    const rows = snap.state.poulaillers.map((p, i) => {
+      const row = h('button', {
+        class: 'sm-row' + (p.id === current ? ' current' : ''), role: 'menuitemradio',
+        'aria-checked': String(p.id === current), style: { '--dot': p.color },
+        onclick: go(() => { if (p.id !== current) api.cmd('poulailler.switch', p.id); }),
+        oncontextmenu: (e) => { e.preventDefault(); closeSpaceMenu(); api.cmd('poulailler.menu', p.id); },
+      },
+      h('span', { class: 'sm-ic', html: I.svg(p.icon) }),
+      h('span', { class: 'sm-name' }, p.name),
+      p.isolated ? h('span', { class: 'sm-tag', title: 'Cookies isolés des autres poulaillers' }, 'isolé') : null,
+      i < 9 ? h('kbd', null, 'Ctrl ' + (i + 1)) : null);
+      // Déposer un onglet sur un poulailler l'y range.
+      row.addEventListener('dragover', (e) => { if (dragging) { e.preventDefault(); row.classList.add('drop-target'); } });
+      row.addEventListener('dragleave', () => row.classList.remove('drop-target'));
+      row.addEventListener('drop', (e) => {
+        e.preventDefault();
+        row.classList.remove('drop-target');
+        if (dragging) api.cmd('tab.move', { id: dragging, poulaillerId: p.id, pinned: false, index: 0 });
+        closeSpaceMenu();
+      });
+      return row;
+    });
+    const p = activeP();
+    spaceMenu = h('div', {
+      class: 'space-menu', role: 'menu', 'aria-label': 'Poulaillers',
+      style: { left: Math.round(r.left) + 'px', top: Math.round(t.bottom + 6) + 'px', width: Math.round(Math.max(220, r.width)) + 'px' },
+      onkeydown: (e) => {
+        const items = [...spaceMenu.querySelectorAll('button')];
+        const i = items.indexOf(document.activeElement);
+        if (e.key === 'Escape') { e.preventDefault(); closeSpaceMenu(); title.focus(); }
+        else if (e.key === 'ArrowDown') { e.preventDefault(); items[(i + 1) % items.length].focus(); }
+        else if (e.key === 'ArrowUp') { e.preventDefault(); items[(i - 1 + items.length) % items.length].focus(); }
+      },
+    },
+    h('div', { class: 'sm-title' }, 'Poulaillers'),
+    h('div', { class: 'sm-list' }, ...rows),
+    h('div', { class: 'sm-sep' }),
+    h('button', { class: 'sm-action', role: 'menuitem', onclick: go(() => openPoulaillerEditor(p)) },
+      h('span', { class: 'sm-ic', html: I.svg('stylo') }), h('span', { class: 'sm-name' }, `Modifier « ${p.name} »`)),
+    h('button', { class: 'sm-action', role: 'menuitem', onclick: go(() => openPoulaillerEditor(null)) },
+      h('span', { class: 'sm-ic', html: I.svg('plus') }), h('span', { class: 'sm-name' }, 'Nouveau poulailler')));
+    // Ouvert au clavier : pas d'animation (geste répété, il doit être instantané).
+    if (fromKeyboard) spaceMenu.classList.add('instant');
+    document.body.append(spaceMenu);
+    // Ne déborde pas en bas de la barre.
+    const mh = spaceMenu.getBoundingClientRect().height;
+    if (t.bottom + 6 + mh > innerHeight - 8) spaceMenu.style.top = Math.max(8, innerHeight - mh - 8) + 'px';
+    title.setAttribute('aria-expanded', 'true');
+    document.addEventListener('mousedown', spaceMenuOutside, true);
+    window.addEventListener('blur', closeSpaceMenu);
+    (spaceMenu.querySelector('.sm-row.current') || spaceMenu.querySelector('button')).focus({ preventScroll: true });
+  }
+
   // ───────────────────────────────────────────── glisser-déposer des onglets
   let dropLine = null;
   function wireDrag(el, id) {
@@ -665,6 +739,7 @@
       content.classList.add('capturing');
     }
     await api.cmd('views.hidden', true);
+    ov.dataset.name = name;
     ov.replaceChildren(build());
     ov.classList.remove('hidden');
     const auto = ov.querySelector('[autofocus]');
@@ -904,7 +979,7 @@
     { id: 'productivite', file: 'plumes.score', icon: 'travail', tint: '#e8b33c', label: 'Productivité', desc: 'Des plumes quand tu avances, des tenders quand tu traînes sur les sites qui distraient.' },
     { id: 'legerete', file: 'legerete.ts', icon: 'etoile', tint: '#d19a66', label: 'Performances', desc: 'Garder le navigateur léger et rapide.' },
     { id: 'extensions', file: 'extensions.json', icon: 'extension', tint: '#ef3e36', label: 'Extensions', desc: 'Les extensions préinstallées, qui fonctionnent sans connexion.' },
-    { id: 'dev', file: 'dev.tools', icon: 'code', tint: '#61afef', label: 'Développeurs', desc: 'Outils pour les développeurs : JSON, code source, données des sites, moteur Chromium.' },
+    { id: 'dev', file: 'dev.tools', icon: 'code', tint: '#61afef', label: 'Développeurs', desc: 'Outils pour les développeurs : JSON, code source, données des sites, pages du moteur.' },
     { id: 'donnees', file: 'donnees.sh', icon: 'effacer', tint: '#e06c75', label: 'Données', desc: 'Tout reste sur ta machine. Tu peux tout effacer.' },
     { id: 'json', file: 'pouley.json', icon: 'outils', tint: '#e5c07b', label: 'Fichier JSON', desc: 'Tous tes réglages dans un fichier JSON : modifie-les directement, ils sont vérifiés avant d’être appliqués.' },
     { id: 'apropos', file: 'README.md', icon: 'livre', tint: '#abb2bf', label: 'À propos', desc: 'PouleyPwolu, le navigateur de Nads.' },
@@ -941,6 +1016,12 @@
           options: Object.fromEntries(Object.entries(AI_PROVIDERS).map(([k, v]) => [k, opt(k, v.label, 'par ' + v.by, { logo: true })])) },
       ];
       case 'recherche': return [
+        { type: 'choice', set: 'browserLanguage', name: 'langue', label: 'Langue du navigateur',
+          help: 'Langue des menus du navigateur, et langue demandée aux sites : Google, YouTube ou Wikipédia répondent dans cette langue.',
+          options: { fr: opt('francais', 'Français', 'France'), 'en-US': opt('anglais', 'English', 'United States'),
+            'es-ES': opt('espagnol', 'Español', 'España'), de: opt('allemand', 'Deutsch', 'Deutschland'),
+            it: opt('italien', 'Italiano', 'Italia'), 'pt-BR': opt('portugais', 'Português', 'Brasil'),
+            nl: opt('neerlandais', 'Nederlands', 'Nederland'), ar: opt('arabe', 'العربية', 'Arabe') } },
         { type: 'choice', set: 'searchEngine', name: 'moteur', label: 'Moteur de recherche', help: 'Utilisé depuis la barre d’adresse et la page Nouvel onglet.',
           options: Object.fromEntries(Object.entries(SEARCH_ENGINES).map(([k, v]) => [k, opt(k, v.label, v.note, { logo: true })])) },
         st.searchEngine === 'comet' ? { type: 'choice', set: 'searchEngine2', name: 'second_choix', label: 'Second choix',
@@ -973,8 +1054,8 @@
           items: [{ label: 'Personnaliser le poulailler actuel', run: () => { closeOverlay(); setTimeout(() => openPoulaillerEditor(activeP()), 60); } }] },
       ].filter(Boolean);
       case 'coffre': if (chromium) return [
-        { type: 'info', name: 'gestionnaire', label: 'Gestionnaire de mots de passe', value: 'Chromium',
-          help: 'Tes identifiants sont rangés par Chromium, chiffrés avec une clé protégée par Windows. Ceux de ton ancien coffre PouleyPwolu y sont importés au passage au nouveau moteur.' },
+        { type: 'info', name: 'gestionnaire', label: 'Gestionnaire de mots de passe', value: 'Intégré',
+          help: 'Tes identifiants sont rangés dans ton profil, chiffrés sur ton ordinateur (about:logins). Ceux de ton ancien coffre PouleyPwolu y sont importés au passage au nouveau moteur.' },
         { type: 'actions', items: [
           { label: 'Ouvrir mes mots de passe', cmd: 'coffre', run: () => { api.cmd('tab.new', { url: 'chrome://password-manager/passwords' }); } },
           { label: 'Vérifier mes mots de passe', cmd: 'coffre --verifier', run: () => { api.cmd('tab.new', { url: 'chrome://password-manager/checkup' }); } },
@@ -1052,8 +1133,8 @@
           { label: 'Vider le cache et recharger', cmd: 'dev --recharger-sans-cache', run: () => api.cmd('dev.hardReload') },
           { label: 'Effacer les données du site', cmd: 'dev --effacer-site', danger: true, run: () => api.cmd('dev.clearSite') },
         ] },
-        { type: 'info', name: 'outils_chromium', label: 'Outils de développement', value: 'F12', help: 'Ctrl+Maj+I ouvre aussi les outils de Chromium (éléments, console, réseau…). Ctrl+Maj+C : inspecter un élément.' },
-        { type: 'actions', help: 'Pages du moteur Chromium :', items: [
+        { type: 'info', name: 'outils_chromium', label: 'Outils de développement', value: 'F12', help: 'Ctrl+Maj+I ouvre aussi les outils du moteur (inspecteur, console, réseau…). Ctrl+Maj+C : inspecter un élément.' },
+        { type: 'actions', help: 'Pages du moteur :', items: [
           { label: 'Fonctions expérimentales (flags)', cmd: 'chrome --flags', run: () => api.cmd('tab.new', { url: 'chrome://flags' }) },
           { label: 'Inspecter les service workers', cmd: 'chrome --inspect', run: () => api.cmd('tab.new', { url: 'chrome://inspect/#service-workers' }) },
           { label: 'Extensions (mode développeur)', cmd: 'chrome --extensions', run: () => api.cmd('tab.new', { url: 'chrome://extensions' }) },
@@ -1069,11 +1150,11 @@
       case 'json': return [{ type: 'jsonedit' }];
       case 'donnees': return [
         chromium ? { type: 'info', name: 'profil', label: 'Tes onglets, favoris et poulaillers', value: 'Sur ta machine',
-          help: 'Rangés dans ton profil Chromium, sur ton ordinateur. Rien n’est envoyé nulle part.' }
+          help: 'Rangés dans ton profil, sur ton ordinateur. Rien n’est envoyé nulle part.' }
           : { type: 'info', name: 'chiffrement', label: 'Tes onglets, favoris et poulaillers', value: snap.security && snap.security.stateEncrypted ? 'Chiffrés' : 'Non chiffrés',
             help: 'Chiffrés en AES-256-GCM. La clé est protégée par Windows : elle ne s’ouvre que dans ta session, pas depuis un autre compte ni un autre ordinateur.' },
         { type: 'info', name: 'cookies', label: 'Cookies et connexions aux sites', value: chromium || (snap.security && snap.security.cookies) ? 'Chiffrés' : 'Version de développement',
-          help: 'Chromium chiffre les cookies avec une clé protégée par Windows.' },
+          help: 'Les cookies restent dans ton profil, sur ton ordinateur.' },
         { type: 'bool', set: 'wipeCacheOnExit', name: 'pas_de_cache_sur_le_disque', label: chromium ? 'Effacer le cache des pages à chaque démarrage' : 'Effacer le cache des pages en fermant', help: 'Le cache contient des copies des pages visitées. Les sites se chargent un peu moins vite la première fois.' },
         chromium ? null : { type: 'info', name: 'bitlocker', label: 'Disque chiffré (BitLocker)', value: { on: 'Activé', off: 'Désactivé', paused: 'En pause' }[snap.security && snap.security.bitlocker] || 'Inconnu',
           help: 'BitLocker chiffre tout le disque : si l’ordinateur est volé, éteint, personne ne peut lire tes fichiers ni les données des sites (stockage local, historique de téléchargement…). C’est la protection la plus complète.' },
@@ -1091,7 +1172,7 @@
         { type: 'extadd' },
         ...(snap.userExtensions || []).map((e) => ({ type: 'userext', ext: e, name: 'ext_' + e.id.slice(0, 6), label: e.name })),
         ...(snap.extensions || []).map((e) => ({ type: 'extcard', ext: e, set: e.setting, name: e.key, label: e.name })),
-        chromium ? { type: 'actions', help: 'Les extensions installées tournent dans Chromium, comme dans Google Chrome.', items: [
+        chromium ? { type: 'actions', help: 'Les extensions viennent d’addons.mozilla.org, vérifiées par Mozilla.', items: [
           { label: 'Gérer toutes les extensions', cmd: 'extensions', run: () => { api.cmd('tab.new', { url: 'chrome://extensions' }); } },
         ] } : null,
         { type: 'actions', help: 'NadsPDF ouvre automatiquement les PDF du web. Pour un fichier de ton ordinateur :', items: [
@@ -1122,7 +1203,7 @@
             help: snap.defaultBrowser === 'default' ? 'Les liens ouverts depuis tes autres applications arrivent dans PouleyPwolu.'
               : 'Windows te laisse choisir toi-même : le bouton ouvre la bonne page des Paramètres, clique ensuite sur « Définir par défaut ».' },
           snap.defaultBrowser === 'default' ? null : { type: 'actions', items: [{ label: 'Faire de PouleyPwolu mon navigateur par défaut', run: () => api.cmd('browser.default') }] },
-          { type: 'info', name: 'version', label: 'Version', value: 'PouleyPwolu ' + snap.version, help: 'Moteur : Chromium ' + (v.chromium || '?') + (chromium ? ' (ungoogled-chromium, sans les services de Google).' : ' (Electron ' + (v.electron || '?') + ').') },
+          { type: 'info', name: 'version', label: 'Version', value: 'PouleyPwolu ' + snap.version, help: 'Moteur : Gecko ' + (v.gecko || (navigator.userAgent.match(/rv:([\d.]+)/) || [])[1] || '?') + ' (celui de Firefox, sans télémétrie).' },
           { type: 'bool', set: 'autoUpdate', name: 'mises_a_jour_auto', label: 'Mises à jour automatiques', help: 'Vérifie au démarrage puis toutes les 6 h sur la page GitHub de PouleyPwolu (aucun identifiant envoyé), télécharge en arrière-plan et installe au prochain redémarrage. C’est la seule connexion que PouleyPwolu fait de lui-même : garde-la active pour recevoir les correctifs de sécurité de Chromium.' },
           { type: 'info', name: 'etat', label: 'État', value: statusText, help: u.error ? u.error : '' },
           { type: 'actions', items: u.status === 'ready' || u.status === 'available'
@@ -1299,15 +1380,15 @@
       case 'jsonedit':
         return jsonEditor();
       case 'extadd': {
-        const input = h('input', { class: 'v-input', placeholder: 'Adresse sur le Chrome Web Store, ex. chromewebstore.google.com/detail/proton-pass/…', spellcheck: 'false' });
+        const input = h('input', { class: 'v-input', placeholder: 'Nom ou lien d’une extension, ex. uBlock Origin, Bitwarden…', spellcheck: 'false' });
         const go = () => { if (input.value.trim()) installExtension(input.value.trim()); };
         input.addEventListener('keydown', (e) => { if (e.key === 'Enter') go(); });
         return h('div', { class: 'set-block ext-add' },
-          h('div', { class: 'set-txt' }, h('b', null, 'Ajouter une extension Chrome'),
-            h('p', null, 'Colle le lien d’une extension du Chrome Web Store (Proton Pass, Bitwarden, uBlock Origin Lite, Dark Reader…), ou ouvre sa page dans un onglet : un bandeau propose de l’ajouter. ' + (snap.chromium ? 'Chromium vérifie la signature et te montre ce que l’extension pourra faire avant de l’installer.' : 'PouleyPwolu vérifie la signature du développeur avant d’installer.'))),
+          h('div', { class: 'set-txt' }, h('b', null, 'Ajouter une extension'),
+            h('p', null, 'Les extensions viennent d’addons.mozilla.org (uBlock Origin, Bitwarden, Proton Pass, Dark Reader…) : tape son nom ou colle son lien, puis clique sur « Ajouter » sur sa page. Mozilla vérifie chaque extension, et elles se mettent à jour toutes seules.')),
           h('div', { class: 'v-pwrow' }, input,
-            h('button', { class: 'btn nads', onclick: go }, 'Installer'),
-            h('button', { class: 'btn', onclick: () => { closeOverlay(); api.cmd('tab.new', { url: 'https://chromewebstore.google.com/' }); } }, 'Parcourir le store')));
+            h('button', { class: 'btn nads', onclick: go }, 'Chercher'),
+            h('button', { class: 'btn', onclick: () => { closeOverlay(); api.cmd('tab.new', { url: 'https://addons.mozilla.org/fr/firefox/extensions/' }); } }, 'Parcourir les extensions')));
       }
       case 'aiext': {
         const x = it.ai;
@@ -1912,7 +1993,7 @@
     if (u && u.status === 'ready' && updateToastShown !== u.version) {
       updateToastShown = u.version;
       cluck('oeuf');
-      toast('PouleyPwolu ' + u.version + ' est prêt (dernières protections de Chromium incluses).', {
+      toast('PouleyPwolu ' + u.version + ' est prêt (dernières protections du moteur incluses).', {
         id: 'update', title: 'Mise à jour', timeout: 0,
         action: { label: 'Redémarrer', run: () => api.cmd('update.install') },
       });
@@ -1932,7 +2013,7 @@
     if (e.stage === 'offer' && engineOffered !== e.version) {
       engineOffered = e.version;
       cluck('oeuf');
-      toast('PouleyPwolu ' + e.version + ' change de moteur : un vrai Chromium, compatible avec toutes les extensions du Chrome Web Store. Onglets, favoris, poulaillers et mots de passe suivent ; il faudra seulement te reconnecter aux sites.', {
+      toast('PouleyPwolu ' + e.version + ' change de moteur : un vrai navigateur, construit sur Firefox, plus léger et sans aucune collecte. Onglets, favoris, poulaillers et mots de passe suivent ; il faudra seulement te reconnecter aux sites.', {
         id: tid, title: 'Nouveau moteur', timeout: 0,
         action: { label: 'Passer au nouveau moteur', run: () => engineSwitch() },
       });
@@ -2237,6 +2318,9 @@
   function renderExtBar() {
     const bar = $('#ext-bar');
     if (!bar || !snap) return;
+    // Moteur Firefox : les extensions sont dans la bulle au bord droit de la page
+    // (experiments/parent.js : installExtBubble), plus dans la barre.
+    if (document.body.classList.contains('chromium')) { if (bar.firstChild) bar.replaceChildren(); return; }
     const list = (snap.userExtensions || []).filter((e) => e.enabled !== false && e.available);
     const key = JSON.stringify(list.map((e) => [e.id, e.pinned, e.badge && e.badge.text, e.badge && e.badge.color]));
     if (bar.dataset.key === key) return;
@@ -2275,10 +2359,11 @@
 
   // Fenêtre d'installation : on montre ce que l'extension pourra faire.
   async function installExtension(input) {
-    // Chromium installe lui-même l'extension, après sa fenêtre de confirmation.
+    // Le navigateur installe lui-même l'extension : on ouvre sa page sur addons.mozilla.org.
     if (document.body.classList.contains('chromium')) {
       const r = await api.cmd('ext.installNative', input);
-      toast(r && r.error ? r.error : 'Téléchargement… Chromium va te demander de confirmer l’installation.', { title: 'Extension', alert: !!(r && r.error), timeout: 6000 });
+      if (r && r.error) toast(r.error, { title: 'Extension', alert: true, timeout: 6000 });
+      else closeOverlay();
       return;
     }
     toast('Téléchargement et vérification de la signature…', { id: 'ext-install', title: 'Extension', timeout: 0 });
@@ -2308,8 +2393,12 @@
     const stop = setInterval(() => { if (overlay !== 'extinstall') { clearInterval(stop); if (!done) api.cmd('ext.cancel', info.token); } }, 400);
   }
 
-  // Sur une page du Chrome Web Store : bandeau « Ajouter à PouleyPwolu ».
+  // Bandeau du Chrome Web Store : inutile avec Firefox (addons.mozilla.org installe tout seul).
   function renderStoreBanner() {
+    const stale = $('#banners .cws-banner');
+    if (stale) { stale.remove(); scheduleLayout(); }
+    return;
+    // eslint-disable-next-line no-unreachable
     const cur = current();
     const m = cur && /^https:\/\/chromewebstore\.google\.com\/detail\/(?:[^/]+\/)?([a-p]{32})/.exec(cur.rec.url || '');
     const old = $('#banners .cws-banner');
@@ -2680,8 +2769,10 @@
   $('#btn-shot').innerHTML = I.svg('capture');
   $('#btn-float').innerHTML = I.svg('superposition');
   $('#btn-shot').onclick = () => api.cmd('shot.menu');
-  $('#btn-pen').innerHTML = '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20l1-5L16 4l4 4L9 19z"/><path d="M14 6l4 4"/></svg>';
+  $('#btn-pen').innerHTML = I.svg('stylo');
   $('#btn-pen').onclick = () => api.cmd('pen.toggle');
+  $('#btn-hide').innerHTML = I.svg('selection');
+  $('#btn-hide').onclick = () => api.cmd('hide.pick');
   $('#btn-float').onclick = () => api.cmd('tab.float');
   $('#btn-split').innerHTML = I.svg('cote');
   $('#btn-repo').onclick = () => api.cmd('repo.menu');
@@ -2759,10 +2850,13 @@
   $('#btn-settings').onclick = () => openSettings();
   $('#btn-add-space').onclick = () => openPoulaillerEditor(null);
   $('#btn-archive').onclick = () => openArchive();
+  $('#btn-tor').onclick = () => api.cmd('tor.open');
   $('#btn-history').onclick = () => api.cmd('tab.new', { url: 'pouley://historique' });
   $('#btn-downloads').onclick = () => api.cmd('tab.new', { url: 'pouley://telechargements' });
   $('#btn-vault').onclick = () => openVault();
-  $('#poulailler-title').onclick = () => openPoulaillerEditor(activeP());
+  $('#poulailler-title').onclick = () => toggleSpaceMenu();
+  // Un onglet qu'on glisse sur le nom ouvre la liste : on le dépose sur un autre poulailler.
+  $('#poulailler-title').addEventListener('dragenter', () => { if (dragging && !spaceMenu) toggleSpaceMenu(true); });
   $('#brand').innerHTML = pouleSvg();
   $('#empty-poule').innerHTML = pouleSvg();
 

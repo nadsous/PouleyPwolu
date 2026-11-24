@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <title>Raccourcis clavier</title>
+  <link rel="stylesheet" href="pages.css" />
+  <style>
+    body { background: var(--base); }
+    main { max-width: 880px; margin: 0 auto; padding: 48px 24px 64px; }
+    h1 { margin: 0 0 4px; color: var(--bright); font-size: 26px; font-weight: 600; letter-spacing: -0.01em; }
+    .lead { margin: 0 0 28px; color: var(--muted); }
+    .search { display: flex; align-items: center; gap: 10px; height: 44px; padding: 0 14px; margin-bottom: 28px;
+      background: var(--panel); border: 1px solid var(--line); border-radius: 12px; }
+    .search:focus-within { border-color: color-mix(in srgb, var(--yellow) 55%, transparent); }
+    .search svg { width: 18px; height: 18px; color: var(--muted); fill: none; stroke: currentColor; stroke-width: 1.6; }
+    .search input { flex: 1; background: none; border: 0; outline: none; color: var(--bright); font: inherit; }
+    .groups { display: grid; grid-template-columns: repeat(auto-fit, minmax(380px, 1fr)); gap: 16px; }
+    section { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 6px; }
+    section h2 { margin: 8px 10px 6px; font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+    .row { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 38px; padding: 6px 10px; border-radius: 9px; }
+    .row:hover { background: var(--elev); }
+    .row span { color: var(--text); }
+    .keys { display: flex; gap: 4px; flex: none; }
+    kbd { min-width: 24px; height: 24px; padding: 0 7px; display: inline-grid; place-items: center; border-radius: 6px;
+      background: var(--elev); border: 1px solid var(--line); border-bottom-width: 2px; color: var(--bright);
+      font: 11.5px 'JetBrains Mono', monospace; }
+    .none { color: var(--muted); padding: 24px 10px; }
+    @media (max-width: 480px) { .groups { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Raccourcis clavier</h1>
+    <p class="lead">Tout PouleyPwolu se pilote au clavier. Ouvre cette page n’importe quand avec <kbd>Ctrl</kbd> <kbd>/</kbd>.</p>
+    <label class="search">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17 17L21 21" stroke-linecap="round" stroke-linejoin="round"/><path d="M3 11C3 15.4183 6.58172 19 11 19C13.213 19 15.2161 18.1015 16.6644 16.6493C18.1077 15.2022 19 13.2053 19 11C19 6.58172 15.4183 3 11 3C6.58172 3 3 6.58172 3 11Z" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <input id="q" placeholder="Chercher un raccourci (onglet, capture, poulailler…)" spellcheck="false" autofocus />
+    </label>
+    <div class="groups" id="groups"></div>
+    <p class="none" id="none" hidden>Aucun raccourci ne correspond.</p>
+  </main>
+  <script src="raccourcis.js"></script>
+  <script src="../lib/keys.js"></script>
+  <script src="../content/raccourcis.js"></script>
+</body>
+</html>

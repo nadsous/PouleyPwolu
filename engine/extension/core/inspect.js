@@ -134,7 +134,7 @@ chrome.webRequest.onHeadersReceived.addListener((d) => {
   } else {
     for (const n of names) addUnique(report.cookies.firstParty, n);
   }
-}, FILTER, ['responseHeaders', 'extraHeaders']);
+}, FILTER, ['responseHeaders']);
 
 chrome.tabs.onRemoved.addListener((chromeId) => reports.delete(chromeId));
 
@@ -200,7 +200,8 @@ async function inspect(recId = current()) {
       fonts: page.fonts || [],
       headingFonts: page.headingFonts || [],
       themeColor: page.themeColor || null,
-      icon: chrome.runtime.getURL('_favicon/') + '?size=64&pageUrl=' + encodeURIComponent(url),
+      // Icône du site connue de l'historique de Firefox (API privée), sinon celle de l'onglet.
+      icon: (chrome.pouleyPrivate ? await chrome.pouleyPrivate.getFavicon(url, 64).catch(() => '') : '') || f.rec.favicon || null,
     },
     privacy,
     pageError: page.error || null,

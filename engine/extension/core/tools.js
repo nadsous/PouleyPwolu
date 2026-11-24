@@ -26,6 +26,24 @@ async function penToggle() {
   }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Masquer des éléments (comme Safari) : content/masquer.js, injecté à la demande.
+
+async function hidePick() {
+  const recId = current();
+  const chromeId = chromeIdOf(recId);
+  const f = recId && findTab(recId);
+  if (chromeId == null || !f || !/^https?:/.test(f.rec.url)) return sendUi('toast', { text: 'L’outil Masquer fonctionne sur les pages web.' });
+  try {
+    await chrome.scripting.executeScript({ target: { tabId: chromeId }, files: ['lib/sprites.js', 'content/masquer.js'] });
+    chrome.tabs.update(chromeId, { active: true }).catch(() => {});
+  } catch {
+    sendUi('toast', { text: 'Impossible de masquer des éléments sur cette page.' });
+  }
+}
+
+chrome.commands.onCommand.addListener((name) => { if (name === 'masquer') ready.then(hidePick); });
+
 const penColor = (c) => (typeof c === 'string' && /^#[0-9a-f]{6}$/i.test(c) ? c : '#EF3E36');
 const PEN_TOOLS = new Set(['main', 'pen', 'marker', 'arrow', 'eraser']);
 
@@ -306,6 +324,7 @@ const downloadIdOf = (id) => {
 
 Object.assign(commands, {
   'pen.toggle': () => penToggle(),
+  'hide.pick': () => hidePick(),
   'shot.capture': (a = {}) => takeShot(a.mode === 'full' ? 'full' : a.mode === 'region' ? 'region' : 'visible'),
   'shot.region': () => takeShot('region'),
   'shot.cancel': () => null,

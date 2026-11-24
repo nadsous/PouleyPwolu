@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <title>Fenêtre Tor</title>
+  <link rel="stylesheet" href="pages.css" />
+  <style>
+    :root { --tor: #7d4698; --tor-2: #a46bc2; --ease-out: cubic-bezier(0.23, 1, 0.32, 1); }
+    body { background: var(--base); display: grid; place-items: center; min-height: 100vh; padding: 24px; }
+    main { width: min(560px, 100%); background: var(--panel); border: 1px solid var(--line); border-radius: 18px; padding: 32px; }
+    .badge { display: inline-flex; align-items: center; gap: 8px; padding: 4px 10px; border-radius: 8px;
+      background: color-mix(in srgb, var(--tor) 22%, transparent); color: var(--tor-2); font-weight: 600; font-size: 12px; letter-spacing: 0.04em; }
+    .badge svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+    h1 { margin: 14px 0 8px; color: var(--bright); font-size: 24px; font-weight: 600; letter-spacing: -0.01em; }
+    p { margin: 0 0 14px; }
+    ul { margin: 0 0 18px; padding-left: 20px; }
+    li { margin: 4px 0; }
+    .warn { border-left: 3px solid var(--tor); padding: 10px 14px; border-radius: 0 10px 10px 0; background: var(--elev); color: var(--text); font-size: 14px; }
+    .warn a { color: var(--tor-2); }
+    .actions { display: flex; align-items: center; gap: 12px; margin-top: 22px; flex-wrap: wrap; }
+    .btn.tor { background: var(--tor); color: #fff; border-color: transparent; transition: transform 0.16s var(--ease-out), filter 0.15s ease; }
+    .btn:active { transform: scale(0.97); }
+    label.remember { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 13px; cursor: pointer; }
+    .progress { display: none; margin-top: 22px; }
+    .progress.on { display: block; }
+    .bar { height: 6px; border-radius: 6px; background: var(--elev); overflow: hidden; }
+    .bar i { display: block; height: 100%; width: 0; background: var(--tor-2); transition: width 0.3s var(--ease-out); }
+    .status { margin-top: 8px; color: var(--muted); font-size: 13px; }
+    .error { color: #f87171; }
+    @media (prefers-reduced-motion: reduce) { .bar i, .btn.tor { transition: none; } }
+  </style>
+</head>
+<body>
+  <main>
+    <span class="badge"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l7.5 3v6c0 4.6-3.1 7.8-7.5 9.3-4.4-1.5-7.5-4.7-7.5-9.3V6z"/></svg>Fenêtre Tor</span>
+    <h1>Naviguer par le réseau Tor</h1>
+    <p>Dans une fenêtre Tor, ton trafic fait trois rebonds chiffrés à travers le monde avant d’arriver au site :</p>
+    <ul>
+      <li>les sites ne voient pas ton adresse IP, ni ton fournisseur d’accès les sites que tu visites ;</li>
+      <li>les adresses <code>.onion</code> fonctionnent ;</li>
+      <li>protection contre l’empreinte du navigateur, WebRTC bloqué ;</li>
+      <li>rien n’est gardé à la fermeture : historique, cookies, cache.</li>
+    </ul>
+    <p class="warn">C’est plus lent, et certains sites bloquent Tor. Surtout, une fenêtre Tor de
+      PouleyPwolu protège <b>moins que le <a href="https://www.torproject.org/download/" target="_blank" rel="noreferrer">Tor Browser</a></b>,
+      où tous les utilisateurs ont exactement la même empreinte. Si ta sécurité en dépend
+      (journalisme, lanceur d’alerte…), utilise le Tor Browser.</p>
+    <div class="actions" id="actions">
+      <button class="btn tor" id="go" autofocus>Ouvrir une fenêtre Tor</button>
+      <label class="remember"><input type="checkbox" id="remember" /> Ne plus afficher cette page</label>
+    </div>
+    <div class="progress" id="progress" role="status" aria-live="polite">
+      <div class="bar"><i id="bar"></i></div>
+      <div class="status" id="status">Connexion au réseau Tor…</div>
+    </div>
+  </main>
+  <script src="tor.js"></script>
+  <script src="../lib/keys.js"></script>
+  <script src="../content/raccourcis.js"></script>
+</body>
+</html>

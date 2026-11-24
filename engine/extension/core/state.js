@@ -11,6 +11,8 @@ export const DEFAULT_STATE = {
     searchEngine2: 'duckduckgo',
     sidebarPosition: 'left',
     sidebarAutoHide: false,
+    browserLanguage: 'fr', // langue des menus et des sites (pouleyPrivate.setLanguage)
+    torWarned: false, // avertissement de la fenêtre Tor déjà lu (pages/tor.html)
     defaultAsked: false,
     newTabPosition: 'start', // start | end | next
     sidebarWidth: 264,

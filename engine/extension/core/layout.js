@@ -17,7 +17,7 @@ let leaveTimer = 0;
 snapshotExtra.peeking = false;
 
 async function normalWindows() {
-  return (await chrome.windows.getAll({ windowTypes: ['normal'] }).catch(() => [])).map((w) => w.id).filter((id) => !floatWindows.ids.has(id));
+  return (await chrome.windows.getAll({ windowTypes: ['normal'] }).catch(() => [])).filter((w) => !w.incognito).map((w) => w.id).filter((id) => !floatWindows.ids.has(id));
 }
 
 async function applyWindow(windowId) {
@@ -51,6 +51,9 @@ function setPeeking(on) {
 
 // Barre masquée : la souris touche le bord (content/raccourcis.js) → elle s'ouvre.
 async function peek(windowId) {
+  // Moteur Firefox : la fenêtre gère elle-même le survol du bord (experiments/parent.js,
+  // installPeek), sans délai. Rien à faire ici.
+  if (P && P.startWindowDrag) return;
   if (!autoHide() || peeking || floatWindows.ids.has(windowId)) return;
   setPeeking(true);
   clearTimeout(leaveTimer);
@@ -60,6 +63,7 @@ async function peek(windowId) {
 
 // La souris quitte la barre ouverte au survol → elle se referme.
 function leave() {
+  if (P && P.startWindowDrag) return;
   if (!peeking) return;
   clearTimeout(leaveTimer);
   leaveTimer = setTimeout(async () => {
@@ -108,7 +112,7 @@ chrome.runtime.onMessage.addListener((msg, sender) => {
 
 // Chaque nouvelle fenêtre reçoit la barre à sa place.
 chrome.windows.onCreated.addListener((w) => {
-  if (w.type !== 'normal' || floatWindows.pending || floatWindows.ids.has(w.id)) return;
+  if (w.type !== 'normal' || w.incognito || floatWindows.pending || floatWindows.ids.has(w.id)) return;
   ready.then(() => applyWindow(w.id));
 }, { windowTypes: ['normal'] });
 ready.then(applyLayout);

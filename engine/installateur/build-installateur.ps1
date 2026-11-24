@@ -1,8 +1,8 @@
 # Fabrique l'installateur de PouleyPwolu : la fenêtre (Installateur.cs, compilée par le csc
-# de .NET Framework 4, présent sur tout Windows) suivie de mini_installer.exe, l'installateur
-# de Chromium, puis de sa taille (8 octets) et de « POULEYPW ».
+# de .NET Framework 4, présent sur tout Windows) suivie de setup.exe, l'installateur
+# du moteur (celui de Firefox, obj-pouleypwolu/dist/install/sea), puis de sa taille (8 octets) et de « POULEYPW ».
 #
-#   build-installateur.ps1 -MiniInstaller <mini_installer.exe> -Sortie <installateur.exe>
+#   build-installateur.ps1 -MiniInstaller <setup.exe du moteur> -Sortie <installateur.exe>
 #   build-installateur.ps1 -MiniInstaller <...> -Remplacer   (remplace le fichier donné)
 param(
   [Parameter(Mandatory = $true)][string]$MiniInstaller,
@@ -38,10 +38,10 @@ try {
     (Join-Path $ici 'Installateur.cs')
   if ($LASTEXITCODE -ne 0) { throw "csc a échoué ($LASTEXITCODE)" }
 
-  # Si on remplace mini_installer, on le met d'abord de côté.
+  # Si on remplace l'installateur du moteur, on le met d'abord de côté.
   $charge = $MiniInstaller
   if ((Resolve-Path $MiniInstaller).Path -eq [IO.Path]::GetFullPath($Sortie)) {
-    $charge = Join-Path $tmp 'mini_installer.exe'
+    $charge = Join-Path $tmp 'setup.exe'
     Copy-Item $MiniInstaller $charge
   }
   $out = [IO.File]::Create($Sortie)

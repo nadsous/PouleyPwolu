@@ -1,0 +1,172 @@
+/* Interface PouleyPwolu dans la fenêtre du navigateur (moteur Firefox).
+   Liée directement dans browser.xhtml par scripts/prepare.py : elle s'applique avant le
+   premier affichage (plus d'interface de Firefox qui s'affiche une seconde au démarrage).
+   La fenêtre naît avec pouley-bar ; l'extension l'enlève dans les fenêtres privées, Tor
+   et en superposition (experiments/parent.js). */
+/* Barre PouleyPwolu : la barre d'onglets et le lanceur de Firefox laissent la place
+   à la barre de l'extension (sidebar_action). */
+/* La barre PouleyPwolu a sa propre adresse, ses boutons et ceux de la fenêtre : la barre
+   d'outils de Firefox disparaît (déplacer la fenêtre : pouleyPrivate.startWindowDrag). */
+:root[pouley-bar]:not([privatebrowsingmode]) #navigator-toolbox {
+  visibility: collapse !important;
+}
+:root[pouley-bar]:not([privatebrowsingmode]) #browser,
+:root[pouley-bar]:not([privatebrowsingmode]) #sidebar-box {
+  background: #111113 !important;
+}
+:root[pouley-bar]:not([privatebrowsingmode]) #TabsToolbar,
+:root[pouley-bar]:not([privatebrowsingmode]) sidebar-main,
+:root[pouley-bar]:not([privatebrowsingmode]) #vertical-tabs,
+:root[pouley-bar]:not([privatebrowsingmode]) #sidebar-header,
+:root[pouley-bar]:not([privatebrowsingmode]) #sidebar-panel-header,
+:root[pouley-bar]:not([privatebrowsingmode]) #sidebar-launcher-splitter {
+  visibility: collapse !important;
+}
+:root[pouley-bar]:not([privatebrowsingmode]) #sidebar-box {
+  min-width: 200px !important;
+  max-width: 440px !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+:root[pouley-bar]:not([privatebrowsingmode]) #sidebar-box[pouley-width] {
+  width: var(--pouley-sidebar-width) !important;
+}
+/* Zones de déplacement (setDragRegions) : barre de titre native, invisible. */
+:root[pouley-bar]:not([privatebrowsingmode]) #sidebar-box {
+  position: relative !important;
+}
+.pouley-drag {
+  position: absolute;
+  z-index: 10;
+  -moz-window-dragging: drag;
+  background: transparent;
+}
+/* La page : un cadre arrondi complet, à 8 px des bords de la fenêtre (Firefox ne dessine
+   que le haut et le côté de la barre). */
+:root[pouley-bar]:not([privatebrowsingmode]) #tabbrowser-tabbox {
+  margin: 8px 8px 8px 2px !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  border-radius: 12px !important;
+  outline: none !important;
+  box-shadow: 0 10px 40px -18px rgba(0, 0, 0, 0.6) !important;
+  overflow: clip !important;
+}
+:root[pouley-bar]:not([privatebrowsingmode])[sidebar-positionend] #tabbrowser-tabbox {
+  margin: 8px 2px 8px 8px !important;
+}
+:root[pouley-bar]:not([privatebrowsingmode])[pouley-hidden] #tabbrowser-tabbox {
+  margin: 8px !important;
+}
+:root[pouley-bar]:not([privatebrowsingmode]) #tabbrowser-tabpanels {
+  border-radius: 11px !important;
+  overflow: clip !important;
+}
+/* Barre masquée (Ctrl+S) : la barre de l'extension n'occupe plus de place. */
+:root[pouley-bar]:not([privatebrowsingmode])[pouley-hidden]:not([pouley-peek]) #sidebar-box,
+:root[pouley-bar]:not([privatebrowsingmode])[pouley-hidden] #sidebar-splitter {
+  visibility: collapse !important;
+}
+/* … et réapparaît aussitôt, par-dessus la page, quand la souris touche le bord. */
+#pouley-hotzone {
+  display: none;
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 6px;
+  z-index: 2147483000;
+}
+:root[sidebar-positionend] #pouley-hotzone {
+  left: auto;
+  right: 0;
+}
+:root[pouley-bar]:not([privatebrowsingmode])[pouley-hidden]:not([pouley-peek]) #pouley-hotzone {
+  display: block;
+}
+:root[pouley-bar]:not([privatebrowsingmode])[pouley-hidden][pouley-peek] #sidebar-box {
+  position: fixed !important;
+  top: 0 !important;
+  bottom: 0 !important;
+  left: 0 !important;
+  z-index: 2147482999 !important;
+  background: #111113 !important;
+  box-shadow: 24px 0 70px -14px rgba(0, 0, 0, 0.7) !important;
+}
+:root[pouley-bar]:not([privatebrowsingmode])[sidebar-positionend][pouley-hidden][pouley-peek] #sidebar-box {
+  left: auto !important;
+  right: 0 !important;
+  box-shadow: -24px 0 70px -14px rgba(0, 0, 0, 0.7) !important;
+}
+/* Fenêtre Tor : ses propres onglets (rien n'entre dans les poulaillers), aux couleurs de
+   PouleyPwolu et violette, pour ne jamais la confondre avec une fenêtre normale. */
+:root[pouley-tor] {
+  --toolbar-bgcolor: #17121d !important;
+  --toolbar-color: #ece6f3 !important;
+  --toolbox-bgcolor: #0f0c13 !important;
+  --toolbox-textcolor: #ece6f3 !important;
+  --toolbox-bgcolor-inactive: #0f0c13 !important;
+  --toolbarbutton-icon-fill: #d9cbe8 !important;
+  --urlbar-box-bgcolor: #221a2b !important;
+  --toolbar-field-background-color: #221a2b !important;
+  --toolbar-field-focus-background-color: #2a2034 !important;
+  --toolbar-field-color: #f4f4f5 !important;
+  --toolbar-field-focus-border-color: #a46bc2 !important;
+  --tab-selected-bgcolor: #2a2034 !important;
+  --sidebar-background-color: #0f0c13 !important;
+  --sidebar-text-color: #ece6f3 !important;
+  --focus-outline-color: #a46bc2 !important;
+}
+:root[pouley-tor] #navigator-toolbox,
+:root[pouley-tor] #browser,
+:root[pouley-tor] sidebar-main {
+  background: #0f0c13 !important;
+}
+:root[pouley-tor] #nav-bar {
+  box-shadow: inset 0 -2px 0 #7d4698 !important;
+}
+/* Pas la barre PouleyPwolu (elle montre les onglets normaux) dans une fenêtre Tor. */
+:root[pouley-tor] #sidebar-box,
+:root[pouley-tor] #sidebar-splitter {
+  visibility: collapse !important;
+}
+:root[pouley-tor] #urlbar-container::before {
+  content: "Tor";
+  align-self: center;
+  margin-inline-end: 6px;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: #7d4698;
+  color: #fff;
+  font-weight: 600;
+  font-size: 11px;
+}
+/* Barre du haut et fenêtres flottantes : ni barre latérale ni barre d'outils. */
+:root[pouley-top] #sidebar-box,
+:root[pouley-top] #sidebar-splitter,
+:root[pouley-float] #sidebar-box,
+:root[pouley-float] #sidebar-splitter,
+:root[pouley-float] #navigator-toolbox,
+:root[pouley-float] sidebar-main,
+:root[pouley-float] #vertical-tabs,
+:root[pouley-float] #sidebar-launcher-splitter,
+:root[pouley-float] #pouley-hotzone {
+  visibility: collapse !important;
+}
+/* Fenêtre en superposition : juste la petite barre PouleyPwolu et la page. */
+:root[pouley-float] #tabbrowser-tabbox {
+  margin: 0 !important;
+  border: none !important;
+  border-radius: 0 !important;
+  outline: none !important;
+  box-shadow: none !important;
+}
+.pouley-drag-top {
+  position: fixed;
+  z-index: 10;
+  -moz-window-dragging: drag;
+  background: transparent;
+}
+#pouley-topbar {
+  border: none;
+  flex: none;
+}

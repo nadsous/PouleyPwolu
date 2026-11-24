@@ -1,6 +1,6 @@
 // Installateur de PouleyPwolu pour Windows : une fenêtre aux couleurs de PouleyPwolu
-// autour de mini_installer (l'installateur de Chromium, sans interface), collé à la fin
-// de cet exécutable par build-installateur.ps1.
+// autour de l'installateur du moteur (celui de Firefox, lancé sans interface avec /S),
+// collé à la fin de cet exécutable par build-installateur.ps1.
 //
 // Compilé par le csc de .NET Framework 4 (présent sur tout Windows 10 et 11) : C# 5,
 // donc ni $"", ni ?., ni nameof.
@@ -47,7 +47,7 @@ namespace Pouley
         }
     }
 
-    // Extraction et lancement de mini_installer, et ce qui entoure l'installation.
+    // Extraction et lancement de l'installateur du moteur, et ce qui entoure l'installation.
     static class Installation
     {
         const string Magie = "POULEYPW";
@@ -60,19 +60,19 @@ namespace Pouley
             get
             {
                 return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                    "PouleyPwolu", "Application");
+                    "PouleyPwolu", "Navigateur");
             }
         }
 
-        public static string Exe { get { return Path.Combine(Dossier, "chrome.exe"); } }
+        public static string Exe { get { return Path.Combine(Dossier, "pouleypwolu.exe"); } }
 
         public static bool DejaInstalle { get { return File.Exists(Exe); } }
 
-        // Processus de PouleyPwolu en cours (celui installé, pas un autre Chromium).
+        // Processus de PouleyPwolu en cours (celui installé, pas une autre copie).
         public static List<Process> Ouverts()
         {
             List<Process> l = new List<Process>();
-            foreach (Process p in Process.GetProcessesByName("chrome"))
+            foreach (Process p in Process.GetProcessesByName("pouleypwolu"))
             {
                 try
                 {
@@ -103,14 +103,14 @@ namespace Pouley
             Thread.Sleep(500);
         }
 
-        // Copie l'installateur de Chromium (collé à la fin de cet exécutable) dans un
+        // Copie l'installateur du moteur (collé à la fin de cet exécutable) dans un
         // dossier temporaire.
         static string Extraire()
         {
             string moi = Assembly.GetExecutingAssembly().Location;
             string dir = Path.Combine(Path.GetTempPath(), "PouleyPwolu-installation-" + Process.GetCurrentProcess().Id);
             Directory.CreateDirectory(dir);
-            string sortie = Path.Combine(dir, "mini_installer.exe");
+            string sortie = Path.Combine(dir, "setup.exe");
             using (FileStream f = new FileStream(moi, FileMode.Open, FileAccess.Read, FileShare.Read))
             {
                 byte[] fin = new byte[16];
@@ -136,19 +136,22 @@ namespace Pouley
             return sortie;
         }
 
-        // Installe (ou met à jour) et renvoie le code de sortie de mini_installer (0 = réussi).
+        // Installe (ou met à jour) et renvoie le code de sortie de l'installateur (0 = réussi).
+        // Installation pour l'utilisateur seul, dans %LOCALAPPDATA%\PouleyPwolu\Navigateur :
+        // pas besoin des droits d'administrateur.
         public static int Installer()
         {
             if (Essai) { Thread.Sleep(8000); return 0; }
             string mini = Extraire();
             try
             {
-                ProcessStartInfo info = new ProcessStartInfo(mini, "--do-not-launch-chrome --verbose-logging");
+                ProcessStartInfo info = new ProcessStartInfo(mini, "/S /InstallDirectoryPath=\"" + Dossier + "\" /DesktopShortcut=true /StartMenuShortcut=true /TaskbarShortcut=true /PrivateBrowsingShortcut=false /MaintenanceService=false");
                 info.UseShellExecute = false;
                 info.CreateNoWindow = true;
                 using (Process p = Process.Start(info))
                 {
                     p.WaitForExit();
+                    if (p.ExitCode == 0) ViderCachesDemarrage();
                     return p.ExitCode;
                 }
             }
@@ -156,6 +159,39 @@ namespace Pouley
             {
                 try { Directory.Delete(Path.GetDirectoryName(mini), true); } catch { }
             }
+        }
+
+        // Après une mise à jour, le cache de démarrage des profils peut pointer vers l'ancien
+        // omni.ja (même numéro de build) : les outils de développement plantent alors. On le
+        // vide ; le navigateur le recrée au démarrage suivant.
+        static void ViderCachesDemarrage()
+        {
+            // compatibility.ini effacé : le navigateur se croit mis à jour et reconstruit tous
+            // ses caches (modules, extensions intégrées) au démarrage suivant.
+            try
+            {
+                string itinerants = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                    "Nads", "PouleyPwolu", "Profiles");
+                if (Directory.Exists(itinerants))
+                    foreach (string profil in Directory.GetDirectories(itinerants))
+                    {
+                        string compat = Path.Combine(profil, "compatibility.ini");
+                        try { if (File.Exists(compat)) File.Delete(compat); } catch { }
+                    }
+            }
+            catch { }
+            try
+            {
+                string profils = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                    "Nads", "PouleyPwolu", "Profiles");
+                if (!Directory.Exists(profils)) return;
+                foreach (string profil in Directory.GetDirectories(profils))
+                {
+                    string cache = Path.Combine(profil, "startupCache");
+                    try { if (Directory.Exists(cache)) Directory.Delete(cache, true); } catch { }
+                }
+            }
+            catch { }
         }
 
         public static void Ouvrir()
@@ -172,10 +208,38 @@ namespace Pouley
                     @"Software\Microsoft\Windows\Shell\Associations\UrlAssociations\https\UserChoice"))
                 {
                     string id = k == null ? null : k.GetValue("ProgId") as string;
-                    return id != null && id.StartsWith("Pouley", StringComparison.OrdinalIgnoreCase);
+                    // Le moteur enregistre ses liens sous FirefoxURL-<empreinte du dossier> ;
+                    // l'empreinte est celle de sa clé StartMenuInternet\<nom>-<empreinte>.
+                    string cle = CleNavigateur();
+                    if (cle == null || cle.IndexOf('-') < 0) return false;
+                    string h = cle.Substring(cle.LastIndexOf('-') + 1);
+                    return id != null && id.Equals("FirefoxURL-" + h, StringComparison.OrdinalIgnoreCase);
                 }
             }
             catch { return false; }
+        }
+
+        // Nom de la clé StartMenuInternet de cette installation (le moteur la nomme
+        // « Firefox-<empreinte du dossier> » ; Windows affiche PouleyPwolu). On la reconnaît
+        // à sa commande, qui lance le pouleypwolu.exe de ce dossier.
+        static string CleNavigateur()
+        {
+            foreach (RegistryKey racine in new RegistryKey[] { Registry.CurrentUser, Registry.LocalMachine })
+            {
+                using (RegistryKey k = racine.OpenSubKey(@"Software\Clients\StartMenuInternet"))
+                {
+                    if (k == null) continue;
+                    foreach (string n in k.GetSubKeyNames())
+                    {
+                        using (RegistryKey cmd = k.OpenSubKey(n + @"\shell\open\command"))
+                        {
+                            string c = cmd == null ? null : cmd.GetValue("") as string;
+                            if (c != null && c.IndexOf(Exe, StringComparison.OrdinalIgnoreCase) >= 0) return n;
+                        }
+                    }
+                }
+            }
+            return null;
         }
 
         // Windows ne laisse aucune application se choisir : on ouvre la page de PouleyPwolu
@@ -191,7 +255,8 @@ namespace Pouley
                         foreach (string v in k.GetValueNames())
                         {
                             string d = k.GetValue(v) as string;
-                            if (d != null && d.IndexOf(@"StartMenuInternet\PouleyPwolu", StringComparison.OrdinalIgnoreCase) >= 0) { nom = v; break; }
+                            string cle = CleNavigateur();
+                            if (d != null && cle != null && d.IndexOf(@"StartMenuInternet\" + cle + @"\", StringComparison.OrdinalIgnoreCase) >= 0) { nom = v; break; }
                         }
                 }
             }
@@ -460,7 +525,7 @@ namespace Pouley
                     if (code == 0) finInstall = T;
                     else
                     {
-                        erreur = message.Length > 0 ? message : "Code " + code + ". Le journal est dans %TEMP%\\chromium_installer.log.";
+                        erreur = message.Length > 0 ? message : "Code " + code + ". Relance l'installateur ou télécharge-le à nouveau.";
                         ecran = Ecran.Erreur;
                         debut = T;
                     }
@@ -675,7 +740,7 @@ namespace Pouley
                 using (Font f = F(onestGras, 30)) Centre(g, miseAJour ? "Mettre à jour PouleyPwolu" : "Installer PouleyPwolu", f, Clair, 185 * k);
                 using (Font f = F(onest, 15))
                     Centre(g, miseAJour ? "Tes poulaillers, onglets, favoris et réglages restent là."
-                                        : "Le navigateur à plumes, sur un vrai Chromium.", f, Discret, 228 * k);
+                                        : "Le navigateur à plumes, léger et sans pistage.", f, Discret, 228 * k);
 
                 float y = 268 * k;
                 if (fermerPouley)
@@ -722,7 +787,7 @@ namespace Pouley
                 Poule(g, 52 * k, 0);
                 using (Font f = F(onestGras, 30)) Centre(g, miseAJour ? "Mise à jour…" : "Installation…", f, Clair, 185 * k);
                 string etape = progression < 0.06 ? (fermerPouley ? "On ferme PouleyPwolu un instant…" : "On prépare le poulailler…")
-                    : progression < 0.55 ? "On installe Chromium…"
+                    : progression < 0.55 ? "On installe le navigateur…"
                     : progression < 0.9 ? "On range les plumes…" : "Encore un petit instant…";
                 using (Font f = F(onest, 15)) Centre(g, etape, f, Discret, 228 * k);
 

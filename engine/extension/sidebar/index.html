@@ -16,9 +16,9 @@
       <div class="side-head drag">
         <div class="brand" id="brand" title="PouleyPwolu"></div>
         <div class="nav no-drag">
-          <button class="icon-btn" data-cmd="tab.back" id="btn-back" title="Précédent (Alt+←)"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></button>
-          <button class="icon-btn" data-cmd="tab.forward" id="btn-forward" title="Suivant (Alt+→)"><svg viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg></button>
-          <button class="icon-btn" id="btn-reload" title="Recharger (Ctrl+R)"><svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.3-5.6M20 4v5h-5"/></svg></button>
+          <button class="icon-btn" data-cmd="tab.back" id="btn-back" title="Précédent (Alt+←)"><svg viewBox="0 0 24 24" data-i="precedent"></svg></button>
+          <button class="icon-btn" data-cmd="tab.forward" id="btn-forward" title="Suivant (Alt+→)"><svg viewBox="0 0 24 24" data-i="suivant"></svg></button>
+          <button class="icon-btn" id="btn-reload" title="Recharger (Ctrl+R)"><svg viewBox="0 0 24 24" data-i="rafraichir"></svg></button>
           <button class="icon-btn" id="btn-hide-sidebar" title="Masquer la barre (Ctrl+S)"></button>
         </div>
         <div class="winctl no-drag" id="winctl">
@@ -35,12 +35,13 @@
             <span id="url-text" class="url-text">Nouvel onglet</span>
           </button>
           <button id="btn-shot" class="url-act" title="Capture d’écran du site (Ctrl+Maj+S)"></button>
+          <button id="btn-hide" class="url-act" title="Masquer des éléments gênants de la page (Ctrl+Maj+H)"></button>
           <button id="btn-pen" class="url-act" title="Stylo : écrire sur la page puis capturer (Ctrl+Maj+D)"></button>
           <button id="btn-float" class="url-act" title="Mettre en superposition : le site flotte au-dessus de tes fenêtres (Ctrl+Maj+P)"></button>
           <button id="btn-repo" class="url-act hidden" title="Dépôt"></button>
           <button id="btn-split" class="url-act" title="Mettre côte à côte : deux sites dans la même fenêtre (Ctrl+Maj+K)"></button>
           <button id="shield" class="shield" title="Bouclier : traqueurs bloqués — ouvrir le rapport (Ctrl+I)">
-            <svg viewBox="0 0 24 24"><path d="M12 3l7 3v6c0 4.5-3 7.6-7 9-4-1.4-7-4.5-7-9V6z"/></svg>
+            <svg viewBox="0 0 24 24" data-i="bouclier"></svg>
             <span id="shield-count">0</span>
           </button>
         </div>
@@ -48,7 +49,7 @@
 
       <div class="tools-row toolbar no-drag" role="toolbar" aria-label="Outils">
         <button class="tool" id="btn-inspector" title="Inspecteur : vie privée, technos, couleurs (Ctrl+I)">
-          <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6"/><path d="M20 20l-4.5-4.5"/></svg><span>Inspecter</span>
+          <svg viewBox="0 0 24 24" data-i="recherche"></svg><span>Inspecter</span>
         </button>
         <div id="ext-bar" class="ext-bar"></div>
       </div>
@@ -57,8 +58,9 @@
       <div id="favorites" class="fav-grid no-drag" data-drop="favorites"></div>
 
       <div class="poulailler-head no-drag">
-        <button id="poulailler-title" class="poulailler-title" title="Modifier ce poulailler">
+        <button id="poulailler-title" class="poulailler-title" title="Changer de poulailler" aria-haspopup="menu" aria-expanded="false">
           <span id="poulailler-icon" class="p-badge"></span><span id="poulailler-name">Perso</span>
+          <svg class="p-chevron" viewBox="0 0 24 24" data-i="bas"></svg>
         </button>
         <span id="poulailler-lock" class="badge-iso" title="Cookies isolés des autres poulaillers">isolé</span>
         <button class="tool focus-tool" id="btn-focus" title="Productivité : plumes = temps utile, tenders = temps sur les sites qui distraient">
@@ -68,35 +70,36 @@
       </div>
 
       <div class="lists no-drag">
-        <button id="tabs-prev" class="icon-btn tabs-arrow prev" title="Onglets précédents"><svg viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></svg></button>
+        <button id="tabs-prev" class="icon-btn tabs-arrow prev" title="Onglets précédents"><svg viewBox="0 0 24 24" data-i="precedent"></svg></button>
         <button id="btn-pinned" class="pinned-btn hidden" title="Pages épinglées de ce poulailler"></button>
         <div id="pinned" class="tab-list pinned" data-drop="pinned"></div>
         <div class="divider"><span></span></div>
         <button id="btn-newtab" class="new-tab"><span class="plus">+</span> Nouvel onglet <kbd>Ctrl T</kbd></button>
         <div id="tabs" class="tab-list" data-drop="tabs"></div>
-        <button id="tabs-next" class="icon-btn tabs-arrow next" title="Onglets suivants"><svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></button>
-        <button id="btn-all-tabs" class="icon-btn all-tabs" title="Tous les onglets"><svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></button>
+        <button id="tabs-next" class="icon-btn tabs-arrow next" title="Onglets suivants"><svg viewBox="0 0 24 24" data-i="suivant"></svg></button>
+        <button id="btn-all-tabs" class="icon-btn all-tabs" title="Tous les onglets"><svg viewBox="0 0 24 24" data-i="bas"></svg></button>
       </div>
 
       <div id="mini-player" class="mini-player no-drag hidden">
         <button class="mp-art" id="mp-art" title="Aller à la musique"></button>
         <button class="mp-txt" id="mp-txt" title="Aller à la musique"><b id="mp-title"></b><span id="mp-sub"></span></button>
         <div class="mp-ctl">
-          <button class="icon-btn" id="mp-prev" title="Précédent"><svg viewBox="0 0 24 24"><path d="M7 5v14M19 6l-9 6 9 6z" fill="currentColor"/></svg></button>
+          <button class="icon-btn" id="mp-prev" title="Précédent"><svg viewBox="0 0 24 24" data-i="piste-prec"></svg></button>
           <button class="icon-btn mp-play" id="mp-toggle" title="Lecture / pause"></button>
-          <button class="icon-btn" id="mp-next" title="Suivant"><svg viewBox="0 0 24 24"><path d="M17 5v14M5 6l9 6-9 6z" fill="currentColor"/></svg></button>
+          <button class="icon-btn" id="mp-next" title="Suivant"><svg viewBox="0 0 24 24" data-i="piste-suiv"></svg></button>
         </div>
         <div class="mp-bar"><i id="mp-progress"></i></div>
       </div>
 
       <div class="side-foot no-drag">
-        <button class="icon-btn chromium-only" id="btn-history" title="Historique (Ctrl+H)"><svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5M12 7v5l3 2"/></svg></button>
-        <button class="icon-btn chromium-only" id="btn-downloads" title="Téléchargements (Ctrl+J)"><svg viewBox="0 0 24 24"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg></button>
-        <button class="icon-btn" id="btn-archive" title="Archive des onglets"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="5" rx="1"/><path d="M5 9v10h14V9M10 13h4"/></svg></button>
+        <button class="icon-btn chromium-only" id="btn-history" title="Historique (Ctrl+H)"><svg viewBox="0 0 24 24" data-i="historique"></svg></button>
+        <button class="icon-btn chromium-only" id="btn-downloads" title="Téléchargements (Ctrl+J)"><svg viewBox="0 0 24 24" data-i="telechargement"></svg></button>
+        <button class="icon-btn tor-btn" id="btn-tor" title="Fenêtre Tor (Ctrl+Maj+N)"><svg viewBox="0 0 24 24" data-i="tor"></svg></button>
+        <button class="icon-btn" id="btn-archive" title="Archive des onglets"><svg viewBox="0 0 24 24" data-i="archive"></svg></button>
         <div id="poulaillers" class="spaces"></div>
-        <button class="icon-btn" id="btn-add-space" title="Nouveau poulailler"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>
-        <button class="icon-btn" id="btn-vault" title="Coffre à mots de passe"><svg viewBox="0 0 24 24"><circle cx="8" cy="15" r="4"/><path d="M11 12l9-9M17 6l3 3M14 9l2 2"/></svg></button>
-        <button class="icon-btn" id="btn-settings" title="Paramètres (Ctrl+,)"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-2.7 1.1V21a2 2 0 1 1-4 0v-.1a1.6 1.6 0 0 0-2.7-1.1l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1A1.6 1.6 0 0 0 3.6 15H3a2 2 0 1 1 0-4h.1a1.6 1.6 0 0 0 1.1-2.7l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1A1.6 1.6 0 0 0 9.7 4.6V4a2 2 0 1 1 4 0v.1a1.6 1.6 0 0 0 2.7 1.1l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0 1.1 2.7H21a2 2 0 1 1 0 4h-.1a1.6 1.6 0 0 0-1.5 1z"/></svg></button>
+        <button class="icon-btn" id="btn-add-space" title="Nouveau poulailler"><svg viewBox="0 0 24 24" data-i="plus"></svg></button>
+        <button class="icon-btn" id="btn-vault" title="Coffre à mots de passe"><svg viewBox="0 0 24 24" data-i="cle"></svg></button>
+        <button class="icon-btn" id="btn-settings" title="Paramètres (Ctrl+,)"><svg viewBox="0 0 24 24" data-i="reglages"></svg></button>
       </div>
     </aside>
 
@@ -107,9 +110,9 @@
       <div id="findbar" class="findbar hidden">
         <input id="find-input" placeholder="Rechercher dans la page…" spellcheck="false" />
         <span id="find-count"></span>
-        <button class="icon-btn" id="find-prev" title="Précédent"><svg viewBox="0 0 24 24"><path d="M6 15l6-6 6 6"/></svg></button>
-        <button class="icon-btn" id="find-next" title="Suivant"><svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></button>
-        <button class="icon-btn" id="find-close" title="Fermer"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+        <button class="icon-btn" id="find-prev" title="Précédent"><svg viewBox="0 0 24 24" data-i="haut"></svg></button>
+        <button class="icon-btn" id="find-next" title="Suivant"><svg viewBox="0 0 24 24" data-i="bas"></svg></button>
+        <button class="icon-btn" id="find-close" title="Fermer"><svg viewBox="0 0 24 24" data-i="x"></svg></button>
       </div>
       <div id="workspace">
         <section id="content" class="panel">
@@ -136,9 +139,9 @@
         <aside id="ai-panel" class="side-panel hidden">
           <header>
             <div class="seg" id="ai-switch"></div>
-            <button class="icon-btn" data-cmd="ai.askPage" title="Résumer la page actuelle"><svg viewBox="0 0 24 24"><path d="M5 5h14v10H8l-3 3z"/></svg></button>
-            <button class="icon-btn" data-cmd="ai.home" title="Nouvelle conversation"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>
-            <button class="icon-btn" data-cmd="ai.toggle" title="Fermer"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+            <button class="icon-btn" data-cmd="ai.askPage" title="Résumer la page actuelle"><svg viewBox="0 0 24 24" data-i="resume"></svg></button>
+            <button class="icon-btn" data-cmd="ai.home" title="Nouvelle conversation"><svg viewBox="0 0 24 24" data-i="plus"></svg></button>
+            <button class="icon-btn" data-cmd="ai.toggle" title="Fermer"><svg viewBox="0 0 24 24" data-i="x"></svg></button>
           </header>
           <div id="ai-slot" class="slot"></div>
         </aside>
@@ -150,8 +153,8 @@
               <button data-tab="design">Charte</button>
               <button data-tab="ai" title="Textes et images générés par IA ?">IA ?</button>
             </div>
-            <button class="icon-btn" id="insp-refresh" title="Analyser à nouveau"><svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.3-5.6M20 4v5h-5"/></svg></button>
-            <button class="icon-btn" id="insp-close" title="Fermer"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+            <button class="icon-btn" id="insp-refresh" title="Analyser à nouveau"><svg viewBox="0 0 24 24" data-i="rafraichir"></svg></button>
+            <button class="icon-btn" id="insp-close" title="Fermer"><svg viewBox="0 0 24 24" data-i="x"></svg></button>
           </header>
           <div id="insp-body" class="insp-body"></div>
         </aside>

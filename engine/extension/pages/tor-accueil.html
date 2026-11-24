@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <title>Fenêtre Tor</title>
+  <link rel="stylesheet" href="pages.css" />
+  <style>
+    :root { --tor: #7d4698; --tor-2: #a46bc2; --bg: #0f0c13; --card: #17121d; --line: rgba(255, 255, 255, 0.08); --ease-out: cubic-bezier(0.23, 1, 0.32, 1); }
+    html, body { background: var(--bg); }
+    body {
+      min-height: 100vh; display: grid; place-items: center; padding: 24px;
+      background: radial-gradient(1200px 600px at 50% -10%, color-mix(in srgb, var(--tor) 28%, transparent), transparent 70%), var(--bg);
+    }
+    main { width: min(640px, 100%); text-align: center; }
+    .status { display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px; border-radius: 999px;
+      background: color-mix(in srgb, var(--tor) 20%, transparent); color: var(--tor-2); font-size: 13px; font-weight: 600; }
+    .status i { width: 8px; height: 8px; border-radius: 50%; background: #4ade80; box-shadow: 0 0 0 3px rgba(74, 222, 128, 0.2); }
+    .status.off i { background: #f87171; box-shadow: 0 0 0 3px rgba(248, 113, 113, 0.2); }
+    .poule { width: 72px; height: 72px; margin: 26px auto 10px; }
+    .poule svg { width: 100%; height: 100%; }
+    h1 { margin: 0 0 6px; color: var(--bright); font-size: 28px; font-weight: 600; letter-spacing: -0.01em; }
+    .lead { margin: 0 0 28px; color: var(--muted); }
+    form { display: flex; align-items: center; gap: 10px; height: 52px; padding: 0 8px 0 18px; border-radius: 14px;
+      background: var(--card); border: 1px solid var(--line); transition: border-color 0.15s ease; }
+    form:focus-within { border-color: color-mix(in srgb, var(--tor-2) 70%, transparent); }
+    form svg { width: 18px; height: 18px; flex: none; color: var(--muted); fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+    form input { flex: 1; min-width: 0; background: none; border: 0; outline: none; color: var(--bright); font: inherit; font-size: 16px; }
+    form button { height: 38px; padding: 0 16px; border: 0; border-radius: 10px; background: var(--tor); color: #fff;
+      font: 600 14px 'Onest', sans-serif; cursor: pointer; transition: transform 0.16s var(--ease-out), filter 0.15s ease; }
+    form button:active { transform: scale(0.97); }
+    .facts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 24px; text-align: left; }
+    .fact { padding: 14px; border-radius: 12px; background: var(--card); border: 1px solid var(--line); font-size: 13px; color: var(--text); }
+    .fact b { display: block; margin-bottom: 4px; color: var(--bright); font-size: 13px; }
+    .note { margin-top: 22px; font-size: 12.5px; color: var(--muted); }
+    .note a { color: var(--tor-2); }
+    @media (max-width: 560px) { .facts { grid-template-columns: 1fr; } }
+    @media (prefers-reduced-motion: reduce) { form button { transition: none; } }
+  </style>
+</head>
+<body>
+  <main>
+    <span class="status" id="status"><i></i><span id="status-text">Connecté au réseau Tor</span></span>
+    <div class="poule" id="poule"></div>
+    <h1>Fenêtre Tor</h1>
+    <p class="lead">Les sites ne voient pas ton adresse IP. Rien n’est gardé à la fermeture.</p>
+    <form id="search" action="https://duckduckgogg42xjoc72x3sjasowoarfbgcmvfimaftt6twagswzczad.onion/" method="get" autocomplete="off">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17 17L21 21"/><path d="M3 11C3 15.4183 6.58172 19 11 19C13.213 19 15.2161 18.1015 16.6644 16.6493C18.1077 15.2022 19 13.2053 19 11C19 6.58172 15.4183 3 11 3C6.58172 3 3 6.58172 3 11Z"/></svg>
+      <input name="q" id="q" placeholder="Rechercher avec DuckDuckGo (.onion) ou taper une adresse" spellcheck="false" autofocus />
+      <button type="submit">Aller</button>
+    </form>
+    <div class="facts">
+      <div class="fact"><b>Trois rebonds</b>Ton trafic traverse trois relais chiffrés avant d’arriver au site.</div>
+      <div class="fact"><b>Sites .onion</b>Les adresses en .onion s’ouvrent ici, et seulement ici.</div>
+      <div class="fact"><b>Rien ne reste</b>Historique, cookies et cache disparaissent avec la fenêtre.</div>
+    </div>
+    <p class="note">Plus lent qu’une fenêtre normale, et moins anonyme que le
+      <a href="https://www.torproject.org/download/" target="_blank" rel="noreferrer">Tor Browser</a>.</p>
+  </main>
+  <script src="../lib/sprites.js"></script>
+  <script src="tor-accueil.js"></script>
+</body>
+</html>

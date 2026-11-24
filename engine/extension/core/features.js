@@ -137,7 +137,10 @@ chrome.runtime.onMessage.addListener((msg, sender, reply) => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Écran partagé : la vue côte à côte de Chromium (chrome.tabs.createSplit).
+// Écran partagé : la vue côte à côte de Firefox (onglets en « split view »), par l'API
+// privée (pouleyPrivate.createSplit / unsplit).
+const createSplit = (ids) => P.createSplit(ids);
+const unsplit = (id) => P.unsplit(id);
 
 snapshotExtra.split = null;
 
@@ -157,13 +160,13 @@ async function startSplit({ other, input } = {}) {
   try {
     const ta = await chrome.tabs.get(ra.chromeId);
     const tb = await chrome.tabs.get(rb.chromeId);
-    if (tb.splitViewId > 0) await chrome.tabs.unsplit(tb.splitViewId).catch(() => {});
-    if (ta.splitViewId > 0) await chrome.tabs.unsplit(ta.splitViewId).catch(() => {});
+    if (tb.splitViewId > 0) await unsplit(tb.splitViewId).catch(() => {});
+    if (ta.splitViewId > 0) await unsplit(ta.splitViewId).catch(() => {});
     if (tb.pinned !== ta.pinned) await chrome.tabs.update(tb.id, { pinned: ta.pinned });
     if (tb.groupId !== ta.groupId) await (ta.groupId > 0 ? chrome.tabs.group({ groupId: ta.groupId, tabIds: [tb.id] }) : chrome.tabs.ungroup([tb.id]));
     const now = await chrome.tabs.get(ta.id);
     await chrome.tabs.move(tb.id, { windowId: now.windowId, index: now.index + 1 });
-    const splitViewId = await chrome.tabs.createSplit([ta.id, tb.id]);
+    const splitViewId = await createSplit([ta.id, tb.id]);
     snapshotExtra.split = { a, b, ratio: 0.5, id: splitViewId };
   } catch (err) {
     sendUi('toast', { text: 'Côte à côte impossible : ' + (err && err.message || err) });
@@ -174,7 +177,7 @@ async function startSplit({ other, input } = {}) {
 async function endSplit() {
   const sp = snapshotExtra.split;
   snapshotExtra.split = null;
-  if (sp && sp.id > 0) await chrome.tabs.unsplit(sp.id).catch(() => {});
+  if (sp && sp.id > 0) await unsplit(sp.id).catch(() => {});
   scheduleBroadcast();
 }
 
@@ -426,6 +429,12 @@ Object.assign(commands, {
 });
 
 // Transparence de la fenêtre (Windows 11) : verre de Windows derrière la barre.
+// Langue du navigateur : menus de Firefox et langue annoncée aux sites (Google…).
+function applyLanguage() {
+  if (P && P.setLanguage) P.setLanguage(S().browserLanguage || 'fr').catch((err) => sendUi('toast', { text: 'Langue : ' + (err && err.message || err) }));
+}
+ready.then(applyLanguage);
+
 function applyMaterial() {
   if (P && P.setWindowMaterial) P.setWindowMaterial(S().windowMaterial || 'none').catch(() => {});
 }
@@ -433,6 +442,7 @@ const setSettings = commands['settings.set'];
 commands['settings.set'] = async (patch = {}) => {
   const r = await setSettings(patch);
   if ('windowMaterial' in patch) applyMaterial();
+  if ('browserLanguage' in patch) applyLanguage();
   return r;
 };
 chrome.windows.onCreated.addListener(() => ready.then(applyMaterial));

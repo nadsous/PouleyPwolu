@@ -1,4 +1,4 @@
-// Publie la version Chromium de PouleyPwolu (Windows, macOS, Linux) sur les releases GitHub.
+// Publie PouleyPwolu (moteur Firefox ; Windows, puis macOS et Linux) sur les releases GitHub.
 //   node scripts/release-moteur.js <version> --windows <id> --macos <id> --linux <id> [--brouillon]
 // <id> : numéro d'exécution des workflows moteur-windows, moteur-macos et moteur-linux
 // (gh run list -w moteur-windows). Une plateforme absente est simplement omise.
@@ -54,9 +54,9 @@ function fromRun(runId, wanted) {
 
 let installer = null;
 if (opt('windows')) {
-  installer = `PouleyPwolu-${version}-windows-x64-installer.exe`;
+  installer = `PouleyPwolu-${version}-windows-x64-installateur.exe`;
   fromRun(opt('windows'), [
-    [/installer.*\.exe$/i, installer],
+    [/install.*\.exe$/i, installer],
     [/windows.*\.zip$|x64\.zip$/i, `PouleyPwolu-${version}-windows-x64.zip`],
   ]);
 }
@@ -90,15 +90,15 @@ for (const f of fs.readdirSync(electronDir)) files.push(path.join(electronDir, f
 
 const sums = files.filter((f) => !/latest\.yml$|blockmap$/.test(f)).map((f) => `${sha256(f)}  ${path.basename(f)}`).join('\n');
 const notes = [
-  `## PouleyPwolu ${version} : le nouveau moteur Chromium`,
+  `## PouleyPwolu ${version} : le nouveau moteur`,
   '',
-  'PouleyPwolu passe sur un vrai Chromium (ungoogled-chromium) : toutes les extensions du Chrome Web Store, moins de mémoire, et des versions pour Windows, macOS et Linux.',
+  'PouleyPwolu devient un vrai navigateur, construit sur le moteur de Firefox : plus léger, sans aucune collecte de données, et les extensions de addons.mozilla.org.',
   '',
   '### Déjà sur PouleyPwolu ?',
-  `La version ${ELECTRON} propose « Passer au nouveau moteur » : poulaillers, onglets, favoris, réglages et mots de passe suivent tout seuls.`,
+  `La version ${ELECTRON} propose « Passer au nouveau moteur ».`,
   '',
   '### Installer',
-  '- **Windows** : `…-windows-x64-installer.exe`. Pas encore signé : « Informations complémentaires » puis « Exécuter quand même ».',
+  '- **Windows** : `…-windows-x64-installateur.exe`. Pas encore signé : « Informations complémentaires » puis « Exécuter quand même ».',
   '- **macOS** : `…-macos-arm64.dmg` (Apple Silicon) ou `…-macos-intel.dmg`. Pas encore notarisé par Apple : après l’avoir glissé dans Applications, clic droit sur PouleyPwolu puis « Ouvrir » (ou `xattr -cr /Applications/PouleyPwolu.app`).',
   '- **Linux** : `…AppImage` (rendre exécutable puis lancer) ou l’archive `.tar.xz`.',
   '',

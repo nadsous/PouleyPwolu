@@ -1,21 +1,36 @@
 {
   "manifest_version": 3,
   "name": "PouleyPwolu",
-  "version": "0.2.0",
+  "version": "0.3.1",
   "description": "Poulaillers, bouclier, inspecteur, détecteur d'IA, stylo, plumes et tenders.",
-  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAtr6lQKzMsHYnn0edYLdvx4A8PbUfU8FP+bwC4xzCkl963aSH5DwMgZaJRvx22av/TTUKLodo8hnzCwjBGPezdZzf3T8Y8/Ndzl5hcg8Q5O3XX7ZtQeC5ZaLQ6AuNeJeoXuwXw7pmm3voBYhVgLjFbjkVbyvtViuMuyGAcxUR/wIEO78ErRuKO89nwNTttnk5A9Ckxjc88xK9IAOwx9AP7bal3AwgSBWIru4XNiQ8F7xaUuj+3SckIsKzwpYWF26eniM/Oeu+lqtaweWPQhw0eMGYv2hShDoanyr6IHjfp1SU/dhlZn7by+XRS1dA0q930bnxxoJPXpsZdfWxgi5YSwIDAQAB",
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "pouleypwolu@nads.site",
+      "strict_min_version": "160.0"
+    }
+  },
   "background": {
-    "service_worker": "background.js",
+    "scripts": [
+      "background.js"
+    ],
     "type": "module"
   },
-  "side_panel": {
-    "default_path": "sidebar/index.html"
+  "sidebar_action": {
+    "default_panel": "sidebar/index.html",
+    "default_title": "PouleyPwolu",
+    "default_icon": {
+      "16": "icons/16.png",
+      "48": "icons/48.png"
+    },
+    "open_at_install": true
   },
   "action": {
     "default_title": "PouleyPwolu"
   },
+  "chrome_url_overrides": {
+    "newtab": "pages/newtab.html"
+  },
   "permissions": [
-    "sidePanel",
     "tabs",
     "tabGroups",
     "storage",
@@ -26,7 +41,6 @@
     "webNavigation",
     "alarms",
     "contextMenus",
-    "favicon",
     "idle",
     "clipboardWrite",
     "management",
@@ -34,13 +48,11 @@
     "downloads",
     "webRequest",
     "cookies",
-    "system.memory",
     "browsingData",
-    "contentSettings",
     "downloads.open",
-    "pouleyPrivate",
-    "processes",
-    "history"
+    "history",
+    "webRequestBlocking",
+    "menus"
   ],
   "host_permissions": [
     "<all_urls>"
@@ -53,12 +65,14 @@
   "content_scripts": [
     {
       "matches": [
-        "https://chromewebstore.google.com/*"
+        "http://*/*",
+        "https://*/*"
       ],
       "js": [
-        "content/cws.js"
+        "content/masquer-appliquer.js"
       ],
-      "run_at": "document_idle"
+      "run_at": "document_start",
+      "all_frames": false
     },
     {
       "matches": [
@@ -147,6 +161,29 @@
         "mac": "Command+I"
       },
       "description": "Inspecter le site"
+    },
+    "masquer": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+H",
+        "mac": "Command+Shift+H"
+      },
+      "description": "Masquer des éléments de la page"
+    }
+  },
+  "experiment_apis": {
+    "pouleyPrivate": {
+      "schema": "experiments/schema.json",
+      "parent": {
+        "scopes": [
+          "addon_parent"
+        ],
+        "script": "experiments/parent.js",
+        "paths": [
+          [
+            "pouleyPrivate"
+          ]
+        ]
+      }
     }
   }
 }

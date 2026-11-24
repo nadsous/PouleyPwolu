@@ -24,7 +24,7 @@ function poulaillerIn(p, keepId) {
   };
 }
 
-// Renvoie les identifiants des extensions du Chrome Web Store installées dans l'ancienne
+// Renvoie les extensions du Chrome Web Store installées dans l'ancienne
 // version (à réinstaller), ou null s'il n'y avait rien à importer.
 export async function importMigration(store) {
   const P = chrome.pouleyPrivate;
@@ -56,5 +56,5 @@ export async function importMigration(store) {
   }
   await store.flush();
   await P.markMigrationImported().catch(() => {});
-  return (old.extensions || []).filter((e) => !e.builtin && /^[a-p]{32}$/.test(e.id || '')).map((e) => ({ id: e.id, name: e.name }));
+  return (old.extensions || []).filter((e) => !e.builtin && e.name).map((e) => ({ id: e.id, name: e.name }));
 }
