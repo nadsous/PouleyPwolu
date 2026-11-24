@@ -1,5 +1,6 @@
 // Publie PouleyPwolu (moteur Firefox ; Windows, puis macOS et Linux) sur les releases GitHub.
 //   node scripts/release-moteur.js <version> --windows <id> --macos <id> --linux <id> [--brouillon]
+//   node scripts/release-moteur.js <version> --local release/moteur   (Windows compilé sur ce PC)
 // <id> : numéro d'exécution des workflows moteur-windows, moteur-macos et moteur-linux
 // (gh run list -w moteur-windows). Une plateforme absente est simplement omise.
 //
@@ -53,7 +54,18 @@ function fromRun(runId, wanted) {
 }
 
 let installer = null;
-if (opt('windows')) {
+// --local <dossier> : installateur et zip Windows compilés sur ce PC (scripts\package.ps1,
+// dossier release\moteur), à la place d'une exécution du workflow moteur-windows.
+if (opt('local')) {
+  installer = `PouleyPwolu-${version}-windows-x64-installateur.exe`;
+  for (const name of [installer, `PouleyPwolu-${version}-windows-x64.zip`]) {
+    const from = path.resolve(ROOT, opt('local'), name);
+    if (!fs.existsSync(from)) throw new Error(`Introuvable : ${from} (lancer scripts\\package.ps1)`);
+    const to = path.join(out, name);
+    fs.copyFileSync(from, to);
+    files.push(to);
+  }
+} else if (opt('windows')) {
   installer = `PouleyPwolu-${version}-windows-x64-installateur.exe`;
   fromRun(opt('windows'), [
     [/install.*\.exe$/i, installer],
@@ -98,15 +110,15 @@ const notes = [
   `La version ${ELECTRON} propose « Passer au nouveau moteur ».`,
   '',
   '### Installer',
-  '- **Windows** : `…-windows-x64-installateur.exe`. Pas encore signé : « Informations complémentaires » puis « Exécuter quand même ».',
-  '- **macOS** : `…-macos-arm64.dmg` (Apple Silicon) ou `…-macos-intel.dmg`. Pas encore notarisé par Apple : après l’avoir glissé dans Applications, clic droit sur PouleyPwolu puis « Ouvrir » (ou `xattr -cr /Applications/PouleyPwolu.app`).',
-  '- **Linux** : `…AppImage` (rendre exécutable puis lancer) ou l’archive `.tar.xz`.',
+  installer ? '- **Windows** : `…-windows-x64-installateur.exe`. Pas encore signé : « Informations complémentaires » puis « Exécuter quand même ».' : null,
+  opt('macos') ? '- **macOS** : `…-macos-arm64.dmg` (Apple Silicon) ou `…-macos-intel.dmg`. Pas encore notarisé par Apple : après l’avoir glissé dans Applications, clic droit sur PouleyPwolu puis « Ouvrir » (ou `xattr -cr /Applications/PouleyPwolu.app`).' : null,
+  opt('linux') ? '- **Linux** : `…AppImage` (rendre exécutable puis lancer) ou l’archive `.tar.xz`.' : null,
   '',
   '### Empreintes SHA-256',
   '```',
   sums,
   '```',
-].join('\n');
+].filter((l) => l !== null).join('\n');
 const notesFile = path.join(work, 'notes.md');
 fs.writeFileSync(notesFile, notes);
 
